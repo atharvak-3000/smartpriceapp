@@ -1,5 +1,6 @@
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
+import path from 'path';
 import authRoutes from './routes/authRoutes';
 import productRoutes from './routes/productRoutes';
 
@@ -8,6 +9,9 @@ const app: Application = express();
 // Middlewares
 app.use(cors());
 app.use(express.json());
+
+// Serve uploaded product images as static files
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // Routes
 app.use('/auth', authRoutes);
@@ -29,3 +33,4 @@ app.use((err: any, req: Request, res: Response, next: any) => {
 });
 
 export default app;
+

@@ -15,14 +15,20 @@ import { useAuthStore } from '../../src/store/useAuthStore';
 import { useProductStore, Product } from '../../src/store/useProductStore';
 import { ProductCard } from '../../src/components/ProductCard';
 import { AddEditProductModal } from '../../src/components/AddEditProductModal';
+import { StockUpdateModal } from '../../src/components/StockUpdateModal';
 import {
   Plus,
   LogOut,
   FolderOpen,
   ShoppingBag,
   History,
-  Scan
+  Scan,
+  AlertTriangle,
+  IndianRupee,
 } from 'lucide-react-native';
+
+const AlertTriangleIcon = AlertTriangle as any;
+const IndianRupeeIcon = IndianRupee as any;
 
 export default function AdminDashboardScreen() {
   const router = useRouter();
@@ -32,20 +38,21 @@ export default function AdminDashboardScreen() {
   const { user, logout, isAuthenticated } = useAuthStore();
   const products = useProductStore((state) => state.products);
   const getCategories = useProductStore((state) => state.getCategories);
+  const getLowStockProducts = useProductStore((state) => state.getLowStockProducts);
+  const getTotalStockValue = useProductStore((state) => state.getTotalStockValue);
 
-  // Modal control
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [prefilledBarcode, setPrefilledBarcode] = useState<string | null>(null);
+  const [stockModalVisible, setStockModalVisible] = useState(false);
+  const [stockProduct, setStockProduct] = useState<Product | null>(null);
 
-  // Redirect if logged out
   useEffect(() => {
     if (!isAuthenticated) {
       router.replace('/(auth)/login');
     }
   }, [isAuthenticated]);
 
-  // Set up header actions
   useEffect(() => {
     navigation.setOptions({
       headerRight: () => (
@@ -57,14 +64,12 @@ export default function AdminDashboardScreen() {
     });
   }, [navigation]);
 
-  // Handle incoming deep links / screen params
+  // Handle incoming screen params
   useEffect(() => {
     if (params.newBarcode) {
       setPrefilledBarcode(params.newBarcode as string);
       setSelectedProduct(null);
       setModalVisible(true);
-      
-      // Clean up search params to prevent reopening
       router.setParams({ newBarcode: '' });
     } else if (params.editProductId) {
       const prod = products.find((p) => p._id === params.editProductId);
@@ -105,42 +110,94 @@ export default function AdminDashboardScreen() {
 
   const handleBarcodeScanRequested = () => {
     setModalVisible(false);
-    // Open barcode scanner modal
     router.push('/scanner');
   };
 
-  // Stats Calculations
+  const handleQuickStock = (product: Product) => {
+    setStockProduct(product);
+    setStockModalVisible(true);
+  };
+
+  // Stats
   const totalProducts = products.length;
   const totalCategories = getCategories().filter((c) => c !== 'All').length;
-  
-  // Sort products by updatedAt to show "Recently Updated"
+  const totalStockValue = getTotalStockValue();
+  const lowStockProducts = getLowStockProducts(5);
+
   const recentlyUpdated = [...products]
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
     .slice(0, 5);
+
+  const formatCurrency = (val: number) =>
+    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(val);
 
   const renderHeader = () => (
     <View style={styles.headerContainer}>
       <Text style={styles.welcomeText}>Hello, {user?.name || 'Owner'}</Text>
       <Text style={styles.dashboardSubtitle}>Store Management Control Panel</Text>
 
-      {/* Stats Bento Grid */}
+      {/* Stats Bento Grid — 3 cards */}
       <View style={styles.statsGrid}>
         <View style={styles.statCard}>
           <View style={styles.statIconContainer}>
-            <ShoppingBag size={20} color={Colors.accent} />
+            <ShoppingBag size={18} color={Colors.accent} />
           </View>
           <Text style={styles.statValue}>{totalProducts}</Text>
-          <Text style={styles.statLabel}>Total Products</Text>
+          <Text style={styles.statLabel}>Products</Text>
         </View>
 
         <View style={styles.statCard}>
-          <View style={[styles.statIconContainer, { backgroundColor: 'rgba(48, 209, 88, 0.1)' }]}>
-            <FolderOpen size={20} color={Colors.price} />
+          <View style={[styles.statIconContainer, { backgroundColor: 'rgba(48,209,88,0.1)' }]}>
+            <FolderOpen size={18} color={Colors.price} />
           </View>
           <Text style={styles.statValue}>{totalCategories}</Text>
           <Text style={styles.statLabel}>Categories</Text>
         </View>
+
+        <View style={styles.statCard}>
+          <View style={[styles.statIconContainer, { backgroundColor: 'rgba(255,159,10,0.1)' }]}>
+            <IndianRupeeIcon size={18} color="#FF9F0A" />
+          </View>
+          <Text style={[styles.statValue, { fontSize: 16 }]}>{formatCurrency(totalStockValue)}</Text>
+          <Text style={styles.statLabel}>Stock Value</Text>
+        </View>
       </View>
+
+      {/* Low Stock Warning */}
+      {lowStockProducts.length > 0 && (
+        <View style={styles.lowStockSection}>
+          <View style={styles.lowStockHeader}>
+            <AlertTriangleIcon size={16} color="#FF9F0A" />
+            <Text style={styles.lowStockTitle}>Low Stock Alert ({lowStockProducts.length})</Text>
+          </View>
+          {lowStockProducts.slice(0, 3).map((p) => (
+            <TouchableOpacity
+              key={p._id}
+              style={styles.lowStockRow}
+              onPress={() => handleQuickStock(p)}
+            >
+              <View style={styles.lowStockInfo}>
+                <Text style={styles.lowStockName} numberOfLines={1}>{p.productName}</Text>
+                <Text style={styles.lowStockCode}>{p.productCode}</Text>
+              </View>
+              <View style={[
+                styles.lowStockBadge,
+                { backgroundColor: p.stock === 0 ? 'rgba(255,69,58,0.15)' : 'rgba(255,159,10,0.15)' }
+              ]}>
+                <Text style={[
+                  styles.lowStockBadgeText,
+                  { color: p.stock === 0 ? Colors.error : '#FF9F0A' }
+                ]}>
+                  {p.stock === 0 ? 'Out' : `${p.stock} left`}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+          {lowStockProducts.length > 3 && (
+            <Text style={styles.moreText}>+{lowStockProducts.length - 3} more items low on stock</Text>
+          )}
+        </View>
+      )}
 
       {/* Actions */}
       <View style={styles.actionRow}>
@@ -149,8 +206,8 @@ export default function AdminDashboardScreen() {
           <Text style={styles.actionBtnText}>Add Product</Text>
         </TouchableOpacity>
         
-        <TouchableOpacity 
-          onPress={() => router.push('/scanner')} 
+        <TouchableOpacity
+          onPress={() => router.push('/scanner')}
           style={[styles.actionBtn, styles.scanActionBtn]}
         >
           <Scan size={18} color={Colors.text} style={{ marginRight: 6 }} />
@@ -199,6 +256,16 @@ export default function AdminDashboardScreen() {
         onBarcodeScanRequested={handleBarcodeScanRequested}
         scannedBarcode={prefilledBarcode}
       />
+
+      {/* Stock Update Modal */}
+      <StockUpdateModal
+        visible={stockModalVisible}
+        product={stockProduct}
+        onClose={() => {
+          setStockModalVisible(false);
+          setStockProduct(null);
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -241,6 +308,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 20,
+    gap: 8,
   },
   statCard: {
     flex: 1,
@@ -248,27 +316,85 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.border,
-    padding: 16,
-    marginHorizontal: 4,
+    padding: 14,
   },
   statIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 34,
+    height: 34,
+    borderRadius: 9,
     backgroundColor: Colors.accentLight,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   statValue: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
     color: Colors.text,
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: Colors.textSecondary,
     marginTop: 2,
+  },
+  lowStockSection: {
+    backgroundColor: 'rgba(255,159,10,0.06)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,159,10,0.2)',
+    padding: 14,
+    marginBottom: 20,
+  },
+  lowStockHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 6,
+  },
+  lowStockTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FF9F0A',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  lowStockRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,159,10,0.15)',
+  },
+  lowStockInfo: {
+    flex: 1,
+    paddingRight: 10,
+  },
+  lowStockName: {
+    fontSize: 13,
+    color: Colors.text,
+    fontWeight: '500',
+  },
+  lowStockCode: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    fontFamily: 'monospace',
+    marginTop: 2,
+  },
+  lowStockBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  lowStockBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  moreText: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 8,
+    textAlign: 'center',
   },
   actionRow: {
     flexDirection: 'row',
@@ -279,14 +405,14 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     height: 48,
-    backgroundColor: Colors.text, // White button
+    backgroundColor: Colors.text,
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
     marginHorizontal: 4,
   },
   actionBtnText: {
-    color: Colors.background, // Black text
+    color: Colors.background,
     fontSize: 14,
     fontWeight: '600',
   },

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -11,22 +11,26 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  Image,
+  Switch,
 } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { Colors } from '../theme/colors';
 import { Product, useProductStore } from '../store/useProductStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { getApiUrl } from '../services/api';
-import { X, Trash2, Camera } from 'lucide-react-native';
+import { X, Trash2, Camera, ImagePlus, Package } from 'lucide-react-native';
 
 const XIcon = X as any;
 const Trash2Icon = Trash2 as any;
 const CameraIcon = Camera as any;
+const ImagePlusIcon = ImagePlus as any;
+const PackageIcon = Package as any;
 
 interface AddEditProductModalProps {
   visible: boolean;
   onClose: () => void;
-  product?: Product | null; // If null, we are in "Add" mode
+  product?: Product | null;
   onBarcodeScanRequested?: () => void;
   scannedBarcode?: string | null;
 }
@@ -37,7 +41,9 @@ interface FormData {
   barcode: string;
   category: string;
   brand: string;
+  description: string;
   price: string;
+  stock: string;
 }
 
 export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
@@ -54,6 +60,9 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
 
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [isActive, setIsActive] = useState(true);
 
   const {
     control,
@@ -68,7 +77,9 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
       barcode: '',
       category: '',
       brand: '',
+      description: '',
       price: '',
+      stock: '0',
     },
   });
 
@@ -82,8 +93,12 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
           barcode: product.barcode || '',
           category: product.category,
           brand: product.brand,
+          description: product.description || '',
           price: product.price.toString(),
+          stock: (product.stock ?? 0).toString(),
         });
+        setImageUrl(product.imageUrl || null);
+        setIsActive(product.status !== 'inactive');
       } else {
         reset({
           productName: '',
@@ -91,11 +106,15 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
           barcode: scannedBarcode || '',
           category: '',
           brand: '',
+          description: '',
           price: '',
+          stock: '0',
         });
+        setImageUrl(null);
+        setIsActive(true);
       }
     }
-  }, [product, visible, reset]);
+  }, [product, visible, reset, scannedBarcode]);
 
   // Set barcode if scanned while modal is active
   useEffect(() => {
@@ -104,6 +123,59 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
     }
   }, [scannedBarcode, setValue]);
 
+  const handlePickImage = async () => {
+    // Dynamic import to avoid requiring ImagePicker at module level
+    try {
+      const ImagePicker = await import('expo-image-picker');
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission Required', 'Please allow access to your photo library to upload a product image.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.7,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        await uploadImageToServer(result.assets[0].uri);
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Failed to open image picker.');
+    }
+  };
+
+  const uploadImageToServer = async (localUri: string) => {
+    setIsUploadingImage(true);
+    try {
+      const API_URL = getApiUrl();
+      const filename = localUri.split('/').pop() || 'product.jpg';
+      const ext = filename.split('.').pop()?.toLowerCase() || 'jpg';
+      const mimeType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+
+      const formData = new FormData();
+      formData.append('image', { uri: localUri, name: filename, type: mimeType } as any);
+
+      const response = await fetch(`${API_URL}/products/upload/image`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || 'Upload failed');
+
+      setImageUrl(result.imageUrl);
+    } catch (e: any) {
+      Alert.alert('Upload Failed', e.message || 'Failed to upload image');
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true);
     try {
@@ -111,6 +183,9 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
       const body = {
         ...data,
         price: Number(data.price),
+        stock: Number(data.stock),
+        imageUrl: imageUrl || undefined,
+        status: isActive ? 'active' : 'inactive',
       };
 
       const url = product ? `${API_URL}/products/${product._id}` : `${API_URL}/products`;
@@ -120,7 +195,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
         method,
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(body),
       });
@@ -163,9 +238,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
               const API_URL = getApiUrl();
               const response = await fetch(`${API_URL}/products/${product._id}`, {
                 method: 'DELETE',
-                headers: {
-                  'Authorization': `Bearer ${token}`,
-                },
+                headers: { Authorization: `Bearer ${token}` },
               });
 
               if (!response.ok) {
@@ -187,11 +260,53 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
     );
   };
 
+  const renderField = (
+    name: keyof FormData,
+    label: string,
+    options: {
+      placeholder?: string;
+      rules?: object;
+      keyboardType?: any;
+      autoCapitalize?: any;
+      multiline?: boolean;
+    } = {}
+  ) => (
+    <View style={styles.inputGroup}>
+      <Text style={styles.label}>{label}</Text>
+      <Controller
+        control={control}
+        rules={options.rules}
+        name={name}
+        render={({ field: { onChange, onBlur, value } }) => (
+          <TextInput
+            style={[
+              styles.input,
+              options.multiline && styles.multilineInput,
+              (errors as any)[name] && styles.inputError,
+            ]}
+            onBlur={onBlur}
+            onChangeText={onChange}
+            value={value}
+            placeholder={options.placeholder}
+            placeholderTextColor={Colors.textSecondary}
+            keyboardType={options.keyboardType}
+            autoCapitalize={options.autoCapitalize}
+            multiline={options.multiline}
+            numberOfLines={options.multiline ? 3 : 1}
+          />
+        )}
+      />
+      {(errors as any)[name] && (
+        <Text style={styles.errorText}>{(errors as any)[name].message}</Text>
+      )}
+    </View>
+  );
+
   return (
     <Modal
       visible={visible}
       animationType="slide"
-      transparent={true}
+      transparent
       onRequestClose={onClose}
     >
       <View style={styles.modalOverlay}>
@@ -209,86 +324,106 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
             </TouchableOpacity>
           </View>
 
-          {/* Form */}
           <ScrollView
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.formContainer}
+            keyboardShouldPersistTaps="handled"
           >
-            {/* Name */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Product Name</Text>
-              <Controller
-                control={control}
-                rules={{ required: 'Product name is required' }}
-                name="productName"
-                render={({ field: { onChange, onBlur, value } }) => (
-                  <TextInput
-                    style={[styles.input, errors.productName && styles.inputError]}
-                    onBlur={onBlur}
-                    onChangeText={onChange}
-                    value={value}
-                    placeholder="e.g. Havells Life Line 1.5 SQ mm"
-                    placeholderTextColor={Colors.textSecondary}
-                  />
-                )}
-              />
-              {errors.productName && (
-                <Text style={styles.errorText}>{errors.productName.message}</Text>
+            {/* ── Image Upload ── */}
+            <View style={styles.imageSection}>
+              {imageUrl ? (
+                <View style={styles.imagePreviewWrap}>
+                  <Image source={{ uri: imageUrl }} style={styles.imagePreview} resizeMode="cover" />
+                  <TouchableOpacity
+                    style={styles.removeImageBtn}
+                    onPress={() => setImageUrl(null)}
+                  >
+                    <XIcon size={14} color="#FFF" />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.imagePlaceholder}>
+                  <PackageIcon size={32} color={Colors.textSecondary} />
+                </View>
               )}
+              <TouchableOpacity
+                style={styles.imageUploadBtn}
+                onPress={handlePickImage}
+                disabled={isUploadingImage}
+              >
+                {isUploadingImage ? (
+                  <ActivityIndicator size="small" color={Colors.accent} />
+                ) : (
+                  <>
+                    <ImagePlusIcon size={16} color={Colors.accent} />
+                    <Text style={styles.imageUploadText}>{imageUrl ? 'Change Image' : 'Upload Image'}</Text>
+                  </>
+                )}
+              </TouchableOpacity>
             </View>
 
-            {/* Code */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Product Code (Unique)</Text>
-              <Controller
-                control={control}
-                rules={{ required: 'Product code is required' }}
-                name="productCode"
-                render={({ field: { onChange, onBlur, value } }) => (
-                  <TextInput
-                    style={[styles.input, errors.productCode && styles.inputError]}
-                    onBlur={onBlur}
-                    onChangeText={onChange}
-                    value={value}
-                    placeholder="e.g. HW-15-RD"
-                    placeholderTextColor={Colors.textSecondary}
-                    autoCapitalize="characters"
-                  />
-                )}
-              />
-              {errors.productCode && (
-                <Text style={styles.errorText}>{errors.productCode.message}</Text>
-              )}
-            </View>
+            {/* ── Core Fields ── */}
+            {renderField('productName', 'Product Name', {
+              placeholder: 'e.g. Havells Life Line 1.5 SQ mm',
+              rules: { required: 'Product name is required' },
+            })}
 
-            {/* Price */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Price (₹)</Text>
-              <Controller
-                control={control}
-                rules={{
-                  required: 'Price is required',
-                  pattern: {
-                    value: /^\d+(\.\d{1,2})?$/,
-                    message: 'Please enter a valid price',
-                  },
-                }}
-                name="price"
-                render={({ field: { onChange, onBlur, value } }) => (
-                  <TextInput
-                    style={[styles.input, errors.price && styles.inputError]}
-                    onBlur={onBlur}
-                    onChangeText={onChange}
-                    value={value}
-                    placeholder="e.g. 1540"
-                    placeholderTextColor={Colors.textSecondary}
-                    keyboardType="numeric"
-                  />
-                )}
-              />
-              {errors.price && (
-                <Text style={styles.errorText}>{errors.price.message}</Text>
-              )}
+            {renderField('productCode', 'Product Code (Unique)', {
+              placeholder: 'e.g. HW-15-RD',
+              rules: { required: 'Product code is required' },
+              autoCapitalize: 'characters',
+            })}
+
+            <View style={styles.rowFields}>
+              {/* Price */}
+              <View style={[styles.inputGroup, styles.halfField]}>
+                <Text style={styles.label}>Price (₹)</Text>
+                <Controller
+                  control={control}
+                  rules={{
+                    required: 'Required',
+                    pattern: { value: /^\d+(\.\d{1,2})?$/, message: 'Invalid price' },
+                  }}
+                  name="price"
+                  render={({ field: { onChange, onBlur, value } }) => (
+                    <TextInput
+                      style={[styles.input, errors.price && styles.inputError]}
+                      onBlur={onBlur}
+                      onChangeText={onChange}
+                      value={value}
+                      placeholder="1540"
+                      placeholderTextColor={Colors.textSecondary}
+                      keyboardType="numeric"
+                    />
+                  )}
+                />
+                {errors.price && <Text style={styles.errorText}>{errors.price.message}</Text>}
+              </View>
+
+              {/* Stock */}
+              <View style={[styles.inputGroup, styles.halfField]}>
+                <Text style={styles.label}>Stock Qty</Text>
+                <Controller
+                  control={control}
+                  rules={{
+                    required: 'Required',
+                    pattern: { value: /^\d+$/, message: 'Whole number' },
+                  }}
+                  name="stock"
+                  render={({ field: { onChange, onBlur, value } }) => (
+                    <TextInput
+                      style={[styles.input, errors.stock && styles.inputError]}
+                      onBlur={onBlur}
+                      onChangeText={onChange}
+                      value={value}
+                      placeholder="0"
+                      placeholderTextColor={Colors.textSecondary}
+                      keyboardType="numeric"
+                    />
+                  )}
+                />
+                {errors.stock && <Text style={styles.errorText}>{errors.stock.message}</Text>}
+              </View>
             </View>
 
             {/* Barcode */}
@@ -310,63 +445,45 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
                     />
                   )}
                 />
-                <TouchableOpacity
-                  onPress={onBarcodeScanRequested}
-                  style={styles.scanInlineBtn}
-                >
+                <TouchableOpacity onPress={onBarcodeScanRequested} style={styles.scanInlineBtn}>
                   <CameraIcon size={18} color={Colors.accent} />
                   <Text style={styles.scanInlineText}>Scan</Text>
                 </TouchableOpacity>
               </View>
             </View>
 
-            {/* Category */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Category</Text>
-              <Controller
-                control={control}
-                rules={{ required: 'Category is required' }}
-                name="category"
-                render={({ field: { onChange, onBlur, value } }) => (
-                  <TextInput
-                    style={[styles.input, errors.category && styles.inputError]}
-                    onBlur={onBlur}
-                    onChangeText={onChange}
-                    value={value}
-                    placeholder="e.g. Wires & Cables"
-                    placeholderTextColor={Colors.textSecondary}
-                  />
-                )}
+            {renderField('category', 'Category', {
+              placeholder: 'e.g. Wires & Cables',
+              rules: { required: 'Category is required' },
+            })}
+
+            {renderField('brand', 'Brand', {
+              placeholder: 'e.g. Havells',
+              rules: { required: 'Brand is required' },
+            })}
+
+            {renderField('description', 'Short Description (Optional)', {
+              placeholder: 'Brief product description for staff reference...',
+              multiline: true,
+            })}
+
+            {/* Status Toggle */}
+            <View style={styles.statusRow}>
+              <View>
+                <Text style={styles.label}>Product Status</Text>
+                <Text style={styles.statusSubtext}>
+                  {isActive ? 'Active — visible in catalog' : 'Inactive — hidden from staff'}
+                </Text>
+              </View>
+              <Switch
+                value={isActive}
+                onValueChange={setIsActive}
+                trackColor={{ false: Colors.border, true: Colors.accentLight }}
+                thumbColor={isActive ? Colors.accent : Colors.textSecondary}
               />
-              {errors.category && (
-                <Text style={styles.errorText}>{errors.category.message}</Text>
-              )}
             </View>
 
-            {/* Brand */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Brand</Text>
-              <Controller
-                control={control}
-                rules={{ required: 'Brand is required' }}
-                name="brand"
-                render={({ field: { onChange, onBlur, value } }) => (
-                  <TextInput
-                    style={[styles.input, errors.brand && styles.inputError]}
-                    onBlur={onBlur}
-                    onChangeText={onChange}
-                    value={value}
-                    placeholder="e.g. Havells"
-                    placeholderTextColor={Colors.textSecondary}
-                  />
-                )}
-              />
-              {errors.brand && (
-                <Text style={styles.errorText}>{errors.brand.message}</Text>
-              )}
-            </View>
-
-            {/* Buttons */}
+            {/* Action Buttons */}
             <View style={styles.actionButtons}>
               {product && (
                 <TouchableOpacity
@@ -422,7 +539,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     borderWidth: 1,
     borderColor: Colors.border,
-    maxHeight: '90%',
+    maxHeight: '92%',
   },
   sheetHeader: {
     flexDirection: 'row',
@@ -443,8 +560,68 @@ const styles = StyleSheet.create({
   formContainer: {
     padding: 20,
   },
+  imageSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    gap: 14,
+  },
+  imagePreviewWrap: {
+    position: 'relative',
+  },
+  imagePreview: {
+    width: 72,
+    height: 72,
+    borderRadius: 10,
+    backgroundColor: '#1C1C1E',
+  },
+  removeImageBtn: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: Colors.error,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imagePlaceholder: {
+    width: 72,
+    height: 72,
+    borderRadius: 10,
+    backgroundColor: '#1C1C1E',
+    borderWidth: 1,
+    borderColor: Colors.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageUploadBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.accent,
+    borderStyle: 'dashed',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  imageUploadText: {
+    fontSize: 14,
+    color: Colors.accent,
+    fontWeight: '600',
+  },
   inputGroup: {
     marginBottom: 16,
+  },
+  halfField: {
+    flex: 1,
+  },
+  rowFields: {
+    flexDirection: 'row',
+    gap: 10,
   },
   label: {
     fontSize: 13,
@@ -461,6 +638,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 15,
     color: Colors.text,
+  },
+  multilineInput: {
+    height: 80,
+    textAlignVertical: 'top',
+    paddingTop: 10,
   },
   inputError: {
     borderColor: Colors.error,
@@ -479,19 +661,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    height: 48, // matching Input height approx
+    height: 45,
     backgroundColor: '#1C1C1E',
     borderWidth: 1,
     borderColor: Colors.border,
     borderTopRightRadius: 8,
     borderBottomRightRadius: 8,
     paddingHorizontal: 12,
+    gap: 6,
   },
   scanInlineText: {
     color: Colors.accent,
     fontSize: 13,
     fontWeight: '600',
-    marginLeft: 6,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: Colors.card,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 14,
+    marginBottom: 16,
+  },
+  statusSubtext: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 2,
   },
   errorText: {
     color: Colors.error,
@@ -503,31 +701,31 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: 10,
     marginBottom: 20,
+    gap: 10,
   },
   button: {
-    height: 48,
-    borderRadius: 8,
+    height: 50,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
+    gap: 6,
   },
   flexButton: {
     flex: 1,
-    marginLeft: 10,
   },
   fullWidthButton: {
     flex: 1,
   },
   saveButton: {
-    backgroundColor: Colors.text, // Pure white for a striking action button in dark theme
+    backgroundColor: Colors.text,
   },
   saveButtonText: {
-    color: Colors.background, // Pure black text on white button
+    color: Colors.background,
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   deleteButton: {
-    flexDirection: 'row',
     backgroundColor: Colors.error,
     width: 100,
   },
@@ -535,6 +733,5 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 15,
     fontWeight: '600',
-    marginLeft: 6,
   },
 });

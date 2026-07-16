@@ -12,7 +12,11 @@ export interface Product {
   barcode?: string;
   category: string;
   brand: string;
+  description?: string;
   price: number;
+  stock: number;
+  imageUrl?: string;
+  status: 'active' | 'inactive';
   createdAt: string;
   updatedAt: string;
 }
@@ -27,12 +31,12 @@ interface ProductState {
   // Search / Filter State
   searchQuery: string;
   selectedCategory: string;
-  sortBy: 'name_asc' | 'price_asc' | 'price_desc';
+  sortBy: 'name_asc' | 'price_asc' | 'price_desc' | 'stock_asc' | 'stock_desc';
   
   // Actions
   setSearchQuery: (query: string) => void;
   setSelectedCategory: (category: string) => void;
-  setSortBy: (sort: 'name_asc' | 'price_asc' | 'price_desc') => void;
+  setSortBy: (sort: 'name_asc' | 'price_asc' | 'price_desc' | 'stock_asc' | 'stock_desc') => void;
   
   loadCache: () => Promise<void>;
   syncWithServer: (token?: string | null) => Promise<void>;
@@ -40,10 +44,13 @@ interface ProductState {
   // Modifying methods (optimistic updates + server sync)
   addProduct: (product: Product) => void;
   updateProduct: (id: string, product: Product) => void;
+  updateStock: (id: string, newStock: number) => void;
   deleteProduct: (id: string) => void;
   
   getFilteredProducts: () => Product[];
   getCategories: () => string[];
+  getLowStockProducts: (threshold?: number) => Product[];
+  getTotalStockValue: () => number;
 }
 
 export const useProductStore = create<ProductState>((set, get) => ({
@@ -83,7 +90,7 @@ export const useProductStore = create<ProductState>((set, get) => ({
     set({ isSyncing: true, syncError: null });
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000); // 6s timeout for low-end devices/networks
+      const timeoutId = setTimeout(() => controller.abort(), 6000); // 6s timeout
       
       const API_URL = getApiUrl();
       const response = await fetch(`${API_URL}/products`, {
@@ -100,7 +107,6 @@ export const useProductStore = create<ProductState>((set, get) => ({
       if (result.success && Array.isArray(result.data)) {
         const syncTime = new Date().toLocaleString();
         
-        // Save to AsyncStorage
         await AsyncStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(result.data));
         await AsyncStorage.setItem(LAST_SYNC_KEY, syncTime);
         
@@ -136,6 +142,14 @@ export const useProductStore = create<ProductState>((set, get) => ({
     AsyncStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(updatedProducts));
   },
 
+  updateStock: (id, newStock) => {
+    const updatedProducts = get().products.map(p =>
+      p._id === id ? { ...p, stock: newStock } : p
+    );
+    set({ products: updatedProducts });
+    AsyncStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(updatedProducts));
+  },
+
   deleteProduct: (id) => {
     const updatedProducts = get().products.filter(p => p._id !== id);
     set({ products: updatedProducts });
@@ -158,7 +172,8 @@ export const useProductStore = create<ProductState>((set, get) => ({
       result = result.filter(p => 
         p.productName.toLowerCase().includes(q) ||
         p.productCode.toLowerCase().includes(q) ||
-        (p.barcode && p.barcode.includes(q))
+        (p.barcode && p.barcode.includes(q)) ||
+        (p.description && p.description.toLowerCase().includes(q))
       );
     }
 
@@ -169,6 +184,10 @@ export const useProductStore = create<ProductState>((set, get) => ({
       result.sort((a, b) => a.price - b.price);
     } else if (sortBy === 'price_desc') {
       result.sort((a, b) => b.price - a.price);
+    } else if (sortBy === 'stock_asc') {
+      result.sort((a, b) => a.stock - b.stock);
+    } else if (sortBy === 'stock_desc') {
+      result.sort((a, b) => b.stock - a.stock);
     }
 
     return result;
@@ -178,5 +197,17 @@ export const useProductStore = create<ProductState>((set, get) => ({
     const { products } = get();
     const categories = new Set(products.map(p => p.category));
     return ['All', ...Array.from(categories)].sort();
-  }
+  },
+
+  getLowStockProducts: (threshold = 5) => {
+    const { products } = get();
+    return products
+      .filter(p => p.stock <= threshold && p.status === 'active')
+      .sort((a, b) => a.stock - b.stock);
+  },
+
+  getTotalStockValue: () => {
+    const { products } = get();
+    return products.reduce((sum, p) => sum + p.price * p.stock, 0);
+  },
 }));

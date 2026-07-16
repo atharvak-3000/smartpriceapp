@@ -15,10 +15,9 @@ export default function RootLayout() {
   const productsLoading = useProductStore((state) => state.isLoading);
 
   useEffect(() => {
-    // Load auth credentials & product cache on startup
     const init = async () => {
       await Promise.all([loadAuth(), loadCache()]);
-      // Background sync on boot
+      // Background sync on boot — no token needed, products are public
       syncWithServer();
     };
     init();
@@ -60,6 +59,13 @@ export default function RootLayout() {
           name="(auth)/login"
           options={{
             title: 'Owner Login',
+            presentation: 'modal',
+          }}
+        />
+        <Stack.Screen
+          name="(auth)/staff-login"
+          options={{
+            title: 'Staff Login',
             presentation: 'modal',
           }}
         />

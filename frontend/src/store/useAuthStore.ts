@@ -8,7 +8,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  role: 'owner';
+  role: 'owner' | 'staff';
 }
 
 interface AuthState {
@@ -19,9 +19,11 @@ interface AuthState {
   login: (token: string, user: User) => Promise<void>;
   logout: () => Promise<void>;
   loadAuth: () => Promise<void>;
+  isOwner: () => boolean;
+  isStaff: () => boolean;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   token: null,
   user: null,
   isAuthenticated: false,
@@ -65,4 +67,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ isLoading: false });
     }
   },
+
+  isOwner: () => get().user?.role === 'owner',
+  isStaff: () => get().user?.role === 'staff',
 }));

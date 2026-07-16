@@ -63,11 +63,11 @@ export const searchProducts = async (req: Request, res: Response): Promise<void>
 // @access  Private (Owner only)
 export const createProduct = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { productName, productCode, barcode, category, brand, price } = req.body;
+    const { productName, productCode, barcode, category, brand, description, price, stock, imageUrl, status } = req.body;
     const formattedCode = productCode.toUpperCase().trim();
     const formattedBarcode = barcode && barcode.trim() !== '' ? barcode.trim() : undefined;
 
-    // Mongoose code
+    // Check duplicate product code
     const existingCode = await Product.findOne({ productCode: formattedCode });
     if (existingCode) {
       res.status(400).json({ success: false, message: `Product with code '${productCode}' already exists` });
@@ -88,7 +88,11 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
       barcode: formattedBarcode,
       category,
       brand,
+      description: description?.trim() || undefined,
       price: Number(price),
+      stock: stock !== undefined ? Number(stock) : 0,
+      imageUrl: imageUrl?.trim() || undefined,
+      status: status || 'active',
     });
 
     res.status(201).json({
@@ -110,11 +114,10 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
 export const updateProduct = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { productName, productCode, barcode, category, brand, price } = req.body;
+    const { productName, productCode, barcode, category, brand, description, price, stock, imageUrl, status } = req.body;
     const formattedCode = productCode ? productCode.toUpperCase().trim() : undefined;
     const formattedBarcode = barcode !== undefined ? (barcode.trim() !== '' ? barcode.trim() : undefined) : undefined;
 
-    // Mongoose code
     let product = await Product.findById(id);
 
     if (!product) {
@@ -149,12 +152,21 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
       category,
       brand,
       price: price !== undefined ? Number(price) : undefined,
+      stock: stock !== undefined ? Number(stock) : undefined,
+      status: status || undefined,
     };
 
-    if (productCode) {
-      updateData.productCode = productCode.toUpperCase().trim();
+    if (description !== undefined) {
+      updateData.description = description.trim() !== '' ? description.trim() : undefined;
+    }
+    if (imageUrl !== undefined) {
+      updateData.imageUrl = imageUrl.trim() !== '' ? imageUrl.trim() : undefined;
+    }
+    if (formattedCode) {
+      updateData.productCode = formattedCode;
     }
 
+    // Remove undefined keys so we don't overwrite with undefined
     Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
 
     const updateQuery: any = { $set: updateData };
@@ -180,6 +192,53 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
     res.status(500).json({
       success: false,
       message: 'Failed to update product',
+      error: error instanceof Error ? error.message : error,
+    });
+  }
+};
+
+// @desc    Update stock quantity (increment or decrement)
+// @route   PATCH /products/:id/stock
+// @access  Private (Owner only)
+export const updateStock = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { delta, absolute } = req.body;
+
+    const product = await Product.findById(id);
+
+    if (!product) {
+      res.status(404).json({ success: false, message: 'Product not found' });
+      return;
+    }
+
+    let newStock: number;
+
+    if (absolute !== undefined) {
+      // Set stock to an absolute value (e.g., stock-take / full count)
+      newStock = Math.max(0, Number(absolute));
+    } else if (delta !== undefined) {
+      // Increment or decrement relative to current stock
+      newStock = Math.max(0, product.stock + Number(delta));
+    } else {
+      res.status(400).json({ success: false, message: 'Provide either delta or absolute stock value' });
+      return;
+    }
+
+    const updatedProduct = await Product.findByIdAndUpdate(
+      id,
+      { $set: { stock: newStock } },
+      { new: true, runValidators: true }
+    );
+
+    res.status(200).json({
+      success: true,
+      data: updatedProduct,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update stock',
       error: error instanceof Error ? error.message : error,
     });
   }

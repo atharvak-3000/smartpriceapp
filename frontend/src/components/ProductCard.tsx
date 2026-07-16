@@ -1,18 +1,25 @@
 import React from 'react';
-import { StyleSheet, Text, View, Pressable, Animated } from 'react-native';
+import { StyleSheet, Text, View, Pressable, Animated, Image } from 'react-native';
 import { Colors } from '../theme/colors';
 import { Product } from '../store/useProductStore';
-import { Barcode, ChevronRight, Hash } from 'lucide-react-native';
+import { Barcode, ChevronRight, Hash, Package } from 'lucide-react-native';
 
 const BarcodeIcon = Barcode as any;
 const ChevronRightIcon = ChevronRight as any;
 const HashIcon = Hash as any;
+const PackageIcon = Package as any;
 
 interface ProductCardProps {
   product: Product;
   onPress?: () => void;
   showChevron?: boolean;
 }
+
+const getStockStyle = (stock: number) => {
+  if (stock === 0) return { bg: 'rgba(255,69,58,0.12)', text: Colors.error };
+  if (stock <= 5) return { bg: 'rgba(255,159,10,0.12)', text: '#FF9F0A' };
+  return { bg: 'rgba(48,209,88,0.12)', text: Colors.success };
+};
 
 export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, showChevron = false }) => {
   const animatedScale = React.useRef(new Animated.Value(1)).current;
@@ -43,6 +50,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, show
     }).format(price);
   };
 
+  const stockStyle = getStockStyle(product.stock ?? 0);
+
   return (
     <Animated.View style={[styles.cardContainer, { transform: [{ scale: animatedScale }] }]}>
       <Pressable
@@ -55,6 +64,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, show
         ]}
       >
         <View style={styles.cardHeader}>
+          {/* Product Image Thumbnail */}
+          {product.imageUrl ? (
+            <Image
+              source={{ uri: product.imageUrl }}
+              style={styles.thumbnail}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={styles.thumbnailPlaceholder}>
+              <PackageIcon size={20} color={Colors.textSecondary} />
+            </View>
+          )}
+
           <View style={styles.leftCol}>
             <Text numberOfLines={2} style={styles.productName}>
               {product.productName}
@@ -90,8 +112,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, show
             </View>
           </View>
           
+          {/* Stock Badge */}
+          <View style={[styles.stockBadge, { backgroundColor: stockStyle.bg }]}>
+            <Text style={[styles.stockBadgeText, { color: stockStyle.text }]}>
+              {product.stock === 0 ? 'Out of Stock' : `Stock: ${product.stock}`}
+            </Text>
+          </View>
+
           {showChevron && (
-            <ChevronRightIcon size={18} color={Colors.textSecondary} />
+            <ChevronRightIcon size={18} color={Colors.textSecondary} style={styles.chevron} />
           )}
         </View>
       </Pressable>
@@ -115,31 +144,48 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   pressable: {
-    padding: 16,
+    padding: 14,
   },
   pressedState: {
     backgroundColor: Colors.cardSelected,
   },
   cardHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'flex-start',
+  },
+  thumbnail: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    marginRight: 12,
+    backgroundColor: '#1E1E1E',
+  },
+  thumbnailPlaceholder: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    marginRight: 12,
+    backgroundColor: '#1E1E1E',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   leftCol: {
     flex: 1,
-    paddingRight: 12,
+    paddingRight: 8,
   },
   productName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: Colors.text,
-    lineHeight: 22,
+    lineHeight: 21,
     letterSpacing: -0.2,
   },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 6,
   },
   metaItem: {
     flexDirection: 'row',
@@ -152,16 +198,17 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   metaText: {
-    fontSize: 12,
+    fontSize: 11,
     color: Colors.textSecondary,
     fontFamily: 'monospace',
   },
   rightCol: {
     alignItems: 'flex-end',
     justifyContent: 'center',
+    minWidth: 80,
   },
   priceText: {
-    fontSize: 20,
+    fontSize: 19,
     fontWeight: '700',
     color: Colors.price,
     letterSpacing: -0.5,
@@ -170,14 +217,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 14,
-    paddingTop: 12,
+    marginTop: 12,
+    paddingTop: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Colors.border,
   },
   tagsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+    flexWrap: 'wrap',
   },
   tag: {
     paddingHorizontal: 8,
@@ -186,6 +235,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1E1E1E',
     borderWidth: 1,
     borderColor: '#333',
+    marginRight: 6,
   },
   tagText: {
     fontSize: 11,
@@ -193,7 +243,6 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
   },
   categoryTag: {
-    marginLeft: 8,
     backgroundColor: Colors.accentLight,
     borderColor: 'rgba(10, 132, 255, 0.2)',
   },
@@ -201,5 +250,18 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: Colors.accent,
+  },
+  stockBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginLeft: 6,
+  },
+  stockBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  chevron: {
+    marginLeft: 6,
   },
 });

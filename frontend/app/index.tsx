@@ -17,6 +17,8 @@ import { Colors } from '../src/theme/colors';
 import { useProductStore, Product } from '../src/store/useProductStore';
 import { useAuthStore } from '../src/store/useAuthStore';
 import { ProductCard } from '../src/components/ProductCard';
+import { ProductDetailSheet } from '../src/components/ProductDetailSheet';
+import { StockUpdateModal } from '../src/components/StockUpdateModal';
 import {
   Search,
   ScanBarcode,
@@ -48,15 +50,19 @@ export default function SearchScreen() {
   const getFilteredProducts = useProductStore((state) => state.getFilteredProducts);
   const getCategories = useProductStore((state) => state.getCategories);
 
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, isOwner } = useAuthStore();
 
   const [showSortOptions, setShowSortOptions] = useState(false);
   const [localQuery, setLocalQuery] = useState(searchQuery);
 
+  // Detail & stock modal state
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [detailVisible, setDetailVisible] = useState(false);
+  const [stockModalVisible, setStockModalVisible] = useState(false);
+
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Fade in animation on load
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 600,
@@ -64,7 +70,7 @@ export default function SearchScreen() {
     }).start();
   }, []);
 
-  // Update layout header to include auth button
+  // Header auth button
   useEffect(() => {
     navigation.setOptions({
       headerRight: () => (
@@ -82,7 +88,6 @@ export default function SearchScreen() {
     });
   }, [isAuthenticated, navigation]);
 
-  // Sync search query store when typing (instant search)
   const handleSearchChange = (text: string) => {
     setLocalQuery(text);
     setSearchQuery(text);
@@ -97,47 +102,69 @@ export default function SearchScreen() {
     setSelectedCategory(category);
   };
 
+  const handleCardPress = (product: Product) => {
+    setSelectedProduct(product);
+    setDetailVisible(true);
+  };
+
+  const handleEditFromDetail = () => {
+    setDetailVisible(false);
+    if (selectedProduct) {
+      router.push({
+        pathname: '/(admin)/dashboard',
+        params: { editProductId: selectedProduct._id },
+      });
+    }
+  };
+
+  const handleStockUpdateFromDetail = () => {
+    setDetailVisible(false);
+    setStockModalVisible(true);
+  };
+
   const filteredProducts = getFilteredProducts();
   const categories = getCategories();
 
-  // Low-end virtualization performance optimizations
   const renderItem = ({ item }: { item: Product }) => (
     <ProductCard
       product={item}
-      onPress={() => {
-        if (isAuthenticated) {
-          // Open edit modal directly in admin screen
-          router.push({
-            pathname: '/(admin)/dashboard',
-            params: { editProductId: item._id }
-          });
-        }
-      }}
-      showChevron={isAuthenticated}
+      onPress={() => handleCardPress(item)}
+      showChevron={true}
     />
   );
 
   const getItemLayout = (_data: any, index: number) => ({
-    length: 110, // Approximate height of ProductCard
-    offset: 110 * index,
+    length: 120,
+    offset: 120 * index,
     index,
   });
+
+  const SORT_OPTIONS = [
+    { key: 'name_asc', label: 'Name (A-Z)' },
+    { key: 'price_asc', label: 'Price (Low-High)' },
+    { key: 'price_desc', label: 'Price (High-Low)' },
+    { key: 'stock_asc', label: 'Stock (Low-High)' },
+    { key: 'stock_desc', label: 'Stock (High-Low)' },
+  ] as const;
+
+  const currentSortLabel = SORT_OPTIONS.find(o => o.key === sortBy)?.label || 'Sort';
 
   return (
     <SafeAreaView style={styles.container}>
       <Animated.View style={[styles.mainView, { opacity: fadeAnim }]}>
+
         {/* Sync Info Header */}
         <View style={styles.syncContainer}>
           <Text style={styles.syncText}>
-            {syncError 
-              ? `${syncError}` 
-              : lastSynced 
-                ? `Last Synced: ${lastSynced}` 
+            {syncError
+              ? `${syncError}`
+              : lastSynced
+                ? `Last Synced: ${lastSynced}`
                 : 'Not Synced'}
           </Text>
-          <TouchableOpacity 
-            disabled={isSyncing} 
-            onPress={() => syncWithServer()} 
+          <TouchableOpacity
+            disabled={isSyncing}
+            onPress={() => syncWithServer()}
             style={styles.syncBtn}
           >
             {isSyncing ? (
@@ -166,7 +193,7 @@ export default function SearchScreen() {
             )}
           </View>
           
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={() => router.push('/scanner')}
             style={styles.scanBtn}
           >
@@ -212,45 +239,34 @@ export default function SearchScreen() {
             {filteredProducts.length} {filteredProducts.length === 1 ? 'Product' : 'Products'}
           </Text>
           
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={() => setShowSortOptions(!showSortOptions)}
             style={styles.sortToggle}
           >
             <SlidersHorizontal size={14} color={Colors.accent as any} style={{ marginRight: 6 }} />
-            <Text style={styles.sortToggleText}>
-              {sortBy === 'name_asc' && 'Name (A-Z)'}
-              {sortBy === 'price_asc' && 'Price (Low-High)'}
-              {sortBy === 'price_desc' && 'Price (High-Low)'}
-            </Text>
+            <Text style={styles.sortToggleText}>{currentSortLabel}</Text>
             <ChevronDown size={14} color={Colors.textSecondary as any} style={{ marginLeft: 4 }} />
           </TouchableOpacity>
         </View>
 
-        {/* Sorting Dropdown Mock Sheet */}
+        {/* Sorting Dropdown */}
         {showSortOptions && (
           <View style={styles.sortDropdown}>
-            <TouchableOpacity 
-              onPress={() => { setSortBy('name_asc'); setShowSortOptions(false); }}
-              style={[styles.sortOption, sortBy === 'name_asc' && styles.sortOptionSelected]}
-            >
-              <Text style={[styles.sortOptionText, sortBy === 'name_asc' && styles.sortOptionTextSelected]}>Name (A-Z)</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              onPress={() => { setSortBy('price_asc'); setShowSortOptions(false); }}
-              style={[styles.sortOption, sortBy === 'price_asc' && styles.sortOptionSelected]}
-            >
-              <Text style={[styles.sortOptionText, sortBy === 'price_asc' && styles.sortOptionTextSelected]}>Price (Low to High)</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              onPress={() => { setSortBy('price_desc'); setShowSortOptions(false); }}
-              style={[styles.sortOption, sortBy === 'price_desc' && styles.sortOptionSelected]}
-            >
-              <Text style={[styles.sortOptionText, sortBy === 'price_desc' && styles.sortOptionTextSelected]}>Price (High to Low)</Text>
-            </TouchableOpacity>
+            {SORT_OPTIONS.map((opt) => (
+              <TouchableOpacity
+                key={opt.key}
+                onPress={() => { setSortBy(opt.key); setShowSortOptions(false); }}
+                style={[styles.sortOption, sortBy === opt.key && styles.sortOptionSelected]}
+              >
+                <Text style={[styles.sortOptionText, sortBy === opt.key && styles.sortOptionTextSelected]}>
+                  {opt.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
         )}
 
-        {/* Products FlatList with optimizations for low-end devices */}
+        {/* Products FlatList */}
         <FlatList
           data={filteredProducts}
           renderItem={renderItem}
@@ -279,6 +295,23 @@ export default function SearchScreen() {
           }
         />
       </Animated.View>
+
+      {/* Product Detail Sheet — opens for everyone */}
+      <ProductDetailSheet
+        visible={detailVisible}
+        product={selectedProduct}
+        onClose={() => setDetailVisible(false)}
+        isOwner={isOwner()}
+        onEdit={handleEditFromDetail}
+        onStockUpdate={handleStockUpdateFromDetail}
+      />
+
+      {/* Stock Update Modal — owner only */}
+      <StockUpdateModal
+        visible={stockModalVisible}
+        product={selectedProduct}
+        onClose={() => setStockModalVisible(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -345,7 +378,7 @@ const styles = StyleSheet.create({
   scanBtn: {
     width: 48,
     height: 48,
-    backgroundColor: Colors.text, // White scanner button
+    backgroundColor: Colors.text,
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',

@@ -31,10 +31,29 @@ const ProductSchema = new Schema<IProduct>(
       required: [true, 'Please add a brand'],
       trim: true,
     },
+    description: {
+      type: String,
+      trim: true,
+    },
     price: {
       type: Number,
       required: [true, 'Please add a price'],
       min: [0, 'Price must be greater than or equal to 0'],
+    },
+    stock: {
+      type: Number,
+      required: true,
+      default: 0,
+      min: [0, 'Stock cannot be negative'],
+    },
+    imageUrl: {
+      type: String,
+      trim: true,
+    },
+    status: {
+      type: String,
+      enum: ['active', 'inactive'],
+      default: 'active',
     },
   },
   {
@@ -46,6 +65,9 @@ const ProductSchema = new Schema<IProduct>(
 ProductSchema.index({ productName: 'text', productCode: 1, barcode: 1 });
 ProductSchema.index({ category: 1 });
 ProductSchema.index({ brand: 1 });
+ProductSchema.index({ status: 1 });
+ProductSchema.index({ stock: 1 });
 
 export const Product = model<IProduct>('Product', ProductSchema);
 export default Product;
+
