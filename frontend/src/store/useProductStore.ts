@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getApiUrl } from '../services/api';
+import { getApiUrl, getApiHeaders } from '../services/api';
+
 
 const PRODUCTS_CACHE_KEY = 'smartprice_products_cache';
 const LAST_SYNC_KEY = 'smartprice_last_sync_time';
@@ -132,9 +133,10 @@ export const useProductStore = create<ProductState>((set, get) => ({
       const API_URL = getApiUrl();
       const response = await fetch(`${API_URL}/products`, {
         signal: controller.signal,
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers: getApiHeaders(token, false),
       });
       clearTimeout(timeoutId);
+
 
       if (!response.ok) {
         throw new Error(`Server returned code ${response.status}`);
@@ -228,10 +230,7 @@ export const useProductStore = create<ProductState>((set, get) => ({
       const API_URL = getApiUrl();
       const response = await fetch(`${API_URL}/products/${id}/quick-price`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: getApiHeaders(token),
         body: JSON.stringify(prices),
       });
 
@@ -269,12 +268,10 @@ export const useProductStore = create<ProductState>((set, get) => ({
       const API_URL = getApiUrl();
       const response = await fetch(`${API_URL}/products/${id}/stock`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: getApiHeaders(token),
         body: JSON.stringify(options),
       });
+
 
       const resJson = await response.json();
       if (!response.ok) {

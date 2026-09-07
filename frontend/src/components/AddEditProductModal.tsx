@@ -18,7 +18,11 @@ import { useForm, Controller } from 'react-hook-form';
 import { Colors } from '../theme/colors';
 import { Product, useProductStore } from '../store/useProductStore';
 import { useAuthStore } from '../store/useAuthStore';
-import { getApiUrl } from '../services/api';
+import { getApiUrl, getApiHeaders } from '../services/api';
+
+
+
+
 import { X, Trash2, Camera, ImagePlus, Package } from 'lucide-react-native';
 
 const XIcon = X as any;
@@ -155,7 +159,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
 
       const response = await fetch(`${API_URL}/products/upload/image`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: getApiHeaders(token, false),
         body: formData,
       });
 
@@ -194,10 +198,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
 
       const response = await fetch(url, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers: getApiHeaders(token),
         body: JSON.stringify(body),
       });
 
@@ -239,8 +240,9 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
               const API_URL = getApiUrl();
               const response = await fetch(`${API_URL}/products/${product._id}`, {
                 method: 'DELETE',
-                headers: { Authorization: `Bearer ${token}` },
+                headers: getApiHeaders(token, false),
               });
+
 
               if (!response.ok) {
                 const result = await response.json();

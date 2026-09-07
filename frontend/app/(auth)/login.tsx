@@ -15,7 +15,10 @@ import { useForm, Controller } from 'react-hook-form';
 import { useRouter } from 'expo-router';
 import { useColors } from '../../src/theme/colors';
 import { useAuthStore } from '../../src/store/useAuthStore';
-import { getApiUrl } from '../../src/services/api';
+import { getApiUrl, getApiHeaders } from '../../src/services/api';
+
+
+
 import { Mail, Lock, Eye, EyeOff, ShieldCheck } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -66,11 +69,10 @@ export default function LoginScreen() {
       const API_URL = getApiUrl();
       const response = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getApiHeaders(),
         body: JSON.stringify(data),
       });
+
 
       const result = await response.json();
 
