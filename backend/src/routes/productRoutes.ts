@@ -4,36 +4,42 @@ import {
   searchProducts,
   createProduct,
   updateProduct,
+  quickUpdatePrice,
   updateStock,
   deleteProduct,
 } from '../controllers/productController';
 import { upload, uploadProductImage, deleteProductImage } from '../controllers/uploadController';
-import { protect, authorize } from '../middleware/authMiddleware';
+import { protect, authorize, optionalProtect } from '../middleware/authMiddleware';
 
 const router = Router();
 
-// --- Public routes (available to all staff / unauthenticated users) ---
-router.get('/', getProducts);
-router.get('/search', searchProducts);
+// --- Public / Read routes (with optional auth to detect role) ---
+router.get('/', optionalProtect, getProducts);
+router.get('/search', optionalProtect, searchProducts);
 
-// --- Protected routes (Owner only) ---
-router.post('/', protect, authorize('owner'), createProduct);
-router.put('/:id', protect, authorize('owner'), updateProduct);
-router.patch('/:id/stock', protect, authorize('owner'), updateStock);
-router.delete('/:id', protect, authorize('owner'), deleteProduct);
+// --- Stock management (Both Admin and Sales Person can add / release stock manually) ---
+router.patch('/:id/stock', protect, authorize('owner', 'admin', 'staff', 'salesperson'), updateStock);
 
-// --- Image upload routes (Owner only) ---
+// --- Quick Price Update (Easy price updation for Admin / Owner) ---
+router.patch('/:id/quick-price', protect, authorize('owner', 'admin'), quickUpdatePrice);
+
+// --- Protected CRUD routes (Owner / Admin only) ---
+router.post('/', protect, authorize('owner', 'admin'), createProduct);
+router.put('/:id', protect, authorize('owner', 'admin'), updateProduct);
+router.delete('/:id', protect, authorize('owner', 'admin'), deleteProduct);
+
+// --- Image upload routes (Owner / Admin only) ---
 router.post(
   '/upload/image',
   protect,
-  authorize('owner'),
+  authorize('owner', 'admin'),
   upload.single('image'),
   uploadProductImage
 );
 router.delete(
   '/upload/image/:filename',
   protect,
-  authorize('owner'),
+  authorize('owner', 'admin'),
   deleteProductImage
 );
 

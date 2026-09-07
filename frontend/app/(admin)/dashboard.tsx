@@ -8,14 +8,21 @@ import {
   ActivityIndicator,
   SafeAreaView,
   Alert,
+  Image,
 } from 'react-native';
 import { useRouter, useNavigation, useLocalSearchParams } from 'expo-router';
-import { Colors } from '../../src/theme/colors';
+import { useColors } from '../../src/theme/colors';
+import { useThemeStore } from '../../src/store/useThemeStore';
+import { useBrandingStore } from '../../src/store/useBrandingStore';
 import { useAuthStore } from '../../src/store/useAuthStore';
 import { useProductStore, Product } from '../../src/store/useProductStore';
 import { ProductCard } from '../../src/components/ProductCard';
 import { AddEditProductModal } from '../../src/components/AddEditProductModal';
 import { StockUpdateModal } from '../../src/components/StockUpdateModal';
+import { QuickPriceModal } from '../../src/components/QuickPriceModal';
+import { QuotationMakerModal } from '../../src/components/QuotationMakerModal';
+import { LogoUploadModal } from '../../src/components/LogoUploadModal';
+import { BrandStockInfographic } from '../../src/components/BrandStockInfographic';
 import {
   Plus,
   LogOut,
@@ -25,27 +32,55 @@ import {
   Scan,
   AlertTriangle,
   IndianRupee,
+  Layers,
+  Store,
+  FileText,
+  Sun,
+  Moon,
 } from 'lucide-react-native';
 
 const AlertTriangleIcon = AlertTriangle as any;
 const IndianRupeeIcon = IndianRupee as any;
+const PlusIcon = Plus as any;
+const LogOutIcon = LogOut as any;
+const FolderOpenIcon = FolderOpen as any;
+const ShoppingBagIcon = ShoppingBag as any;
+const HistoryIcon = History as any;
+const ScanIcon = Scan as any;
+const LayersIcon = Layers as any;
+const StoreIcon = Store as any;
+const FileTextIcon = FileText as any;
+const SunIcon = Sun as any;
+const MoonIcon = Moon as any;
 
 export default function AdminDashboardScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const params = useLocalSearchParams();
+  const colors = useColors();
+  const { theme, toggleTheme } = useThemeStore();
+  const branding = useBrandingStore();
 
   const { user, logout, isAuthenticated } = useAuthStore();
   const products = useProductStore((state) => state.products);
   const getCategories = useProductStore((state) => state.getCategories);
   const getLowStockProducts = useProductStore((state) => state.getLowStockProducts);
   const getTotalStockValue = useProductStore((state) => state.getTotalStockValue);
+  const getTotalStockCount = useProductStore((state) => state.getTotalStockCount);
 
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [prefilledBarcode, setPrefilledBarcode] = useState<string | null>(null);
+
   const [stockModalVisible, setStockModalVisible] = useState(false);
   const [stockProduct, setStockProduct] = useState<Product | null>(null);
+
+  const [quickPriceModalVisible, setQuickPriceModalVisible] = useState(false);
+  const [quickPriceProduct, setQuickPriceProduct] = useState<Product | null>(null);
+
+  const [quotationModalVisible, setQuotationModalVisible] = useState(false);
+  const [quotePrefillProduct, setQuotePrefillProduct] = useState<Product | null>(null);
+
+  const [logoModalVisible, setLogoModalVisible] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -56,26 +91,42 @@ export default function AdminDashboardScreen() {
   useEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
-          <LogOut size={18} color={Colors.error} />
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
+        <View style={styles.headerRightRow}>
+          <TouchableOpacity
+            onPress={toggleTheme}
+            style={[
+              styles.themePillBtn,
+              { backgroundColor: colors.inputBackground, borderColor: colors.border },
+            ]}
+          >
+            {theme === 'dark' ? (
+              <>
+                <SunIcon size={14} color="#FFD60A" style={{ marginRight: 4 }} />
+                <Text style={[styles.themePillText, { color: colors.text }]}>Light</Text>
+              </>
+            ) : (
+              <>
+                <MoonIcon size={14} color="#5856D6" style={{ marginRight: 4 }} />
+                <Text style={[styles.themePillText, { color: colors.text }]}>Dark</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
+            <LogOutIcon size={18} color={colors.error} />
+            <Text style={[styles.logoutText, { color: colors.error }]}>Logout</Text>
+          </TouchableOpacity>
+        </View>
       ),
     });
-  }, [navigation]);
+  }, [navigation, colors, theme]);
 
   // Handle incoming screen params
   useEffect(() => {
-    if (params.newBarcode) {
-      setPrefilledBarcode(params.newBarcode as string);
-      setSelectedProduct(null);
-      setModalVisible(true);
-      router.setParams({ newBarcode: '' });
-    } else if (params.editProductId) {
+    if (params.editProductId) {
       const prod = products.find((p) => p._id === params.editProductId);
       if (prod) {
         setSelectedProduct(prod);
-        setPrefilledBarcode(null);
         setModalVisible(true);
       }
       router.setParams({ editProductId: '' });
@@ -98,19 +149,12 @@ export default function AdminDashboardScreen() {
 
   const handleProductPress = (product: Product) => {
     setSelectedProduct(product);
-    setPrefilledBarcode(null);
     setModalVisible(true);
   };
 
   const handleAddNew = () => {
     setSelectedProduct(null);
-    setPrefilledBarcode(null);
     setModalVisible(true);
-  };
-
-  const handleBarcodeScanRequested = () => {
-    setModalVisible(false);
-    router.push('/scanner');
   };
 
   const handleQuickStock = (product: Product) => {
@@ -118,113 +162,188 @@ export default function AdminDashboardScreen() {
     setStockModalVisible(true);
   };
 
+  const handleQuickPrice = (product: Product) => {
+    setQuickPriceProduct(product);
+    setQuickPriceModalVisible(true);
+  };
+
+  const handleAddToQuote = (product: Product) => {
+    setQuotePrefillProduct(product);
+    setQuotationModalVisible(true);
+  };
+
   // Stats
   const totalProducts = products.length;
   const totalCategories = getCategories().filter((c) => c !== 'All').length;
+  const totalStockUnits = getTotalStockCount();
   const totalStockValue = getTotalStockValue();
   const lowStockProducts = getLowStockProducts(5);
 
   const recentlyUpdated = [...products]
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-    .slice(0, 5);
+    .slice(0, 6);
 
   const formatCurrency = (val: number) =>
     new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(val);
 
   const renderHeader = () => (
     <View style={styles.headerContainer}>
-      <Text style={styles.welcomeText}>Hello, {user?.name || 'Owner'}</Text>
-      <Text style={styles.dashboardSubtitle}>Store Management Control Panel</Text>
+      {/* Store Logo & Welcome Banner */}
+      <View style={[styles.brandingBanner, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={styles.storeBrandingInfo}>
+          {branding.logoUri ? (
+            <Image source={{ uri: branding.logoUri }} style={styles.bannerLogo} resizeMode="contain" />
+          ) : (
+            <View style={[styles.bannerLogoPlaceholder, { backgroundColor: colors.accentLight }]}>
+              <StoreIcon size={24} color={colors.accent} />
+            </View>
+          )}
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.welcomeText, { color: colors.text }]}>
+              Hello, {user?.name || 'Store Owner'}
+            </Text>
+            <Text style={[styles.dashboardSubtitle, { color: colors.textSecondary }]}>
+              {branding.storeName} • Admin Control Panel
+            </Text>
+          </View>
+        </View>
 
-      {/* Stats Bento Grid — 3 cards */}
+        <TouchableOpacity
+          onPress={() => setLogoModalVisible(true)}
+          style={[styles.editBrandingBtn, { borderColor: colors.accent }]}
+        >
+          <Text style={[styles.editBrandingText, { color: colors.accent }]}>Upload Logo</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Stats Bento Grid — 4 Cards */}
       <View style={styles.statsGrid}>
-        <View style={styles.statCard}>
-          <View style={styles.statIconContainer}>
-            <ShoppingBag size={18} color={Colors.accent} />
+        <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={[styles.statIconContainer, { backgroundColor: colors.accentLight }]}>
+            <ShoppingBagIcon size={18} color={colors.accent} />
           </View>
-          <Text style={styles.statValue}>{totalProducts}</Text>
-          <Text style={styles.statLabel}>Products</Text>
+          <Text style={[styles.statValue, { color: colors.text }]}>{totalProducts}</Text>
+          <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Products</Text>
         </View>
 
-        <View style={styles.statCard}>
+        <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={[styles.statIconContainer, { backgroundColor: 'rgba(48,209,88,0.1)' }]}>
-            <FolderOpen size={18} color={Colors.price} />
+            <LayersIcon size={18} color={colors.price} />
           </View>
-          <Text style={styles.statValue}>{totalCategories}</Text>
-          <Text style={styles.statLabel}>Categories</Text>
+          <Text style={[styles.statValue, { color: colors.text }]}>{totalStockUnits}</Text>
+          <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Total Units</Text>
         </View>
 
-        <View style={styles.statCard}>
-          <View style={[styles.statIconContainer, { backgroundColor: 'rgba(255,159,10,0.1)' }]}>
-            <IndianRupeeIcon size={18} color="#FF9F0A" />
+        <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={[styles.statIconContainer, { backgroundColor: 'rgba(191,90,242,0.1)' }]}>
+            <FolderOpenIcon size={18} color="#BF5AF2" />
           </View>
-          <Text style={[styles.statValue, { fontSize: 16 }]}>{formatCurrency(totalStockValue)}</Text>
-          <Text style={styles.statLabel}>Stock Value</Text>
+          <Text style={[styles.statValue, { color: colors.text }]}>{totalCategories}</Text>
+          <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Categories</Text>
+        </View>
+
+        <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={[styles.statIconContainer, { backgroundColor: 'rgba(255,159,10,0.1)' }]}>
+            <IndianRupeeIcon size={18} color={colors.warning} />
+          </View>
+          <Text numberOfLines={1} style={[styles.statValue, { fontSize: 15, color: colors.text }]}>
+            {formatCurrency(totalStockValue)}
+          </Text>
+          <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Stock Value</Text>
         </View>
       </View>
 
-      {/* Low Stock Warning */}
+      {/* Brand Stock Distribution Infographics */}
+      <BrandStockInfographic />
+
+      {/* Primary Action Buttons */}
+      <View style={styles.actionRow}>
+        <TouchableOpacity
+          onPress={handleAddNew}
+          style={[styles.actionBtn, { backgroundColor: colors.accent }]}
+        >
+          <PlusIcon size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+          <Text style={styles.actionBtnText}>Add Product</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => {
+            setQuotePrefillProduct(null);
+            setQuotationModalVisible(true);
+          }}
+          style={[styles.actionBtn, { backgroundColor: colors.price }]}
+        >
+          <FileTextIcon size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+          <Text style={styles.actionBtnText}>Make Quotation</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => setLogoModalVisible(true)}
+          style={[styles.actionBtn, styles.scanActionBtn, { borderColor: colors.border }]}
+        >
+          <StoreIcon size={18} color={colors.text} style={{ marginRight: 6 }} />
+          <Text style={[styles.actionBtnText, { color: colors.text }]}>Store Info</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Low Stock Alert Section */}
       {lowStockProducts.length > 0 && (
-        <View style={styles.lowStockSection}>
+        <View style={[styles.lowStockSection, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.lowStockHeader}>
-            <AlertTriangleIcon size={16} color="#FF9F0A" />
-            <Text style={styles.lowStockTitle}>Low Stock Alert ({lowStockProducts.length})</Text>
+            <AlertTriangleIcon size={16} color={colors.warning} />
+            <Text style={[styles.lowStockTitle, { color: colors.text }]}>
+              Low Stock Alert ({lowStockProducts.length})
+            </Text>
           </View>
-          {lowStockProducts.slice(0, 3).map((p) => (
+          {lowStockProducts.slice(0, 4).map((p) => (
             <TouchableOpacity
               key={p._id}
-              style={styles.lowStockRow}
+              style={[styles.lowStockRow, { borderBottomColor: colors.border }]}
               onPress={() => handleQuickStock(p)}
             >
               <View style={styles.lowStockInfo}>
-                <Text style={styles.lowStockName} numberOfLines={1}>{p.productName}</Text>
-                <Text style={styles.lowStockCode}>{p.productCode}</Text>
+                <Text style={[styles.lowStockName, { color: colors.text }]} numberOfLines={1}>
+                  {p.productName}
+                </Text>
+                <Text style={[styles.lowStockCode, { color: colors.textSecondary }]}>
+                  {p.brand} • {p.productCode}
+                </Text>
               </View>
-              <View style={[
-                styles.lowStockBadge,
-                { backgroundColor: p.stock === 0 ? 'rgba(255,69,58,0.15)' : 'rgba(255,159,10,0.15)' }
-              ]}>
-                <Text style={[
-                  styles.lowStockBadgeText,
-                  { color: p.stock === 0 ? Colors.error : '#FF9F0A' }
-                ]}>
-                  {p.stock === 0 ? 'Out' : `${p.stock} left`}
+              <View
+                style={[
+                  styles.lowStockBadge,
+                  {
+                    backgroundColor:
+                      p.stock === 0 ? 'rgba(255,69,58,0.15)' : 'rgba(255,159,10,0.15)',
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.lowStockBadgeText,
+                    { color: p.stock === 0 ? colors.error : colors.warning },
+                  ]}
+                >
+                  {p.stock === 0 ? 'Out of Stock' : `${p.stock} left`}
                 </Text>
               </View>
             </TouchableOpacity>
           ))}
-          {lowStockProducts.length > 3 && (
-            <Text style={styles.moreText}>+{lowStockProducts.length - 3} more items low on stock</Text>
-          )}
         </View>
       )}
 
-      {/* Actions */}
-      <View style={styles.actionRow}>
-        <TouchableOpacity onPress={handleAddNew} style={styles.actionBtn}>
-          <Plus size={18} color="#000" style={{ marginRight: 6 }} />
-          <Text style={styles.actionBtnText}>Add Product</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          onPress={() => router.push('/scanner')}
-          style={[styles.actionBtn, styles.scanActionBtn]}
-        >
-          <Scan size={18} color={Colors.text} style={{ marginRight: 6 }} />
-          <Text style={[styles.actionBtnText, { color: Colors.text }]}>Scan & Add</Text>
-        </TouchableOpacity>
-      </View>
-
       {/* List Header */}
       <View style={styles.listHeader}>
-        <History size={16} color={Colors.textSecondary} style={{ marginRight: 6 }} />
-        <Text style={styles.listHeaderTitle}>Recently Updated Products</Text>
+        <HistoryIcon size={16} color={colors.textSecondary} style={{ marginRight: 6 }} />
+        <Text style={[styles.listHeaderTitle, { color: colors.textSecondary }]}>
+          Recently Updated Products
+        </Text>
       </View>
     </View>
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <FlatList
         data={recentlyUpdated}
         renderItem={({ item }) => (
@@ -232,6 +351,9 @@ export default function AdminDashboardScreen() {
             product={item}
             onPress={() => handleProductPress(item)}
             showChevron={true}
+            onQuickPrice={handleQuickPrice}
+            onQuickStock={handleQuickStock}
+            onAddToQuote={handleAddToQuote}
           />
         )}
         keyExtractor={(item) => item._id}
@@ -239,7 +361,9 @@ export default function AdminDashboardScreen() {
         contentContainerStyle={styles.scrollContent}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No products added yet.</Text>
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+              No products added yet.
+            </Text>
           </View>
         }
       />
@@ -250,14 +374,21 @@ export default function AdminDashboardScreen() {
         onClose={() => {
           setModalVisible(false);
           setSelectedProduct(null);
-          setPrefilledBarcode(null);
         }}
         product={selectedProduct}
-        onBarcodeScanRequested={handleBarcodeScanRequested}
-        scannedBarcode={prefilledBarcode}
       />
 
-      {/* Stock Update Modal */}
+      {/* Quick Price Modal (Admin) */}
+      <QuickPriceModal
+        visible={quickPriceModalVisible}
+        product={quickPriceProduct}
+        onClose={() => {
+          setQuickPriceModalVisible(false);
+          setQuickPriceProduct(null);
+        }}
+      />
+
+      {/* Quick Stock Modal */}
       <StockUpdateModal
         visible={stockModalVisible}
         product={stockProduct}
@@ -266,6 +397,22 @@ export default function AdminDashboardScreen() {
           setStockProduct(null);
         }}
       />
+
+      {/* Quotation Maker Modal */}
+      <QuotationMakerModal
+        visible={quotationModalVisible}
+        preselectedProduct={quotePrefillProduct}
+        onClose={() => {
+          setQuotationModalVisible(false);
+          setQuotePrefillProduct(null);
+        }}
+      />
+
+      {/* Logo & Store Branding Modal */}
+      <LogoUploadModal
+        visible={logoModalVisible}
+        onClose={() => setLogoModalVisible(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -273,174 +420,209 @@ export default function AdminDashboardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
   },
   scrollContent: {
-    paddingBottom: 40,
+    paddingBottom: 30,
+  },
+  headerRightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  themePillBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  themePillText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  headerIconBtn: {
+    padding: 6,
   },
   logoutBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 8,
-    marginRight: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
   logoutText: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.error,
-    marginLeft: 6,
+    marginLeft: 4,
   },
   headerContainer: {
-    padding: 16,
+    paddingTop: 10,
+  },
+  brandingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  storeBrandingInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  bannerLogo: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+  },
+  bannerLogoPlaceholder: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   welcomeText: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: Colors.text,
+    fontSize: 17,
+    fontWeight: '800',
   },
   dashboardSubtitle: {
-    fontSize: 13,
-    color: Colors.textSecondary,
+    fontSize: 12,
     marginTop: 2,
-    marginBottom: 20,
+  },
+  editBrandingBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  editBrandingText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   statsGrid: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 20,
+    flexWrap: 'wrap',
+    marginHorizontal: 12,
     gap: 8,
   },
   statCard: {
     flex: 1,
-    backgroundColor: Colors.card,
+    minWidth: '46%',
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: Colors.border,
     padding: 14,
+    gap: 4,
   },
   statIconContainer: {
-    width: 34,
-    height: 34,
-    borderRadius: 9,
-    backgroundColor: Colors.accentLight,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 4,
   },
   statValue: {
     fontSize: 22,
-    fontWeight: 'bold',
-    color: Colors.text,
+    fontWeight: '800',
+    letterSpacing: -0.3,
   },
   statLabel: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-    marginTop: 2,
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    marginTop: 14,
+    gap: 8,
+  },
+  actionBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 12,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+  },
+  actionBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  scanActionBtn: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
   },
   lowStockSection: {
-    backgroundColor: 'rgba(255,159,10,0.06)',
+    marginHorizontal: 16,
+    marginTop: 14,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,159,10,0.2)',
     padding: 14,
-    marginBottom: 20,
   },
   lowStockHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
     gap: 6,
   },
   lowStockTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#FF9F0A',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
   },
   lowStockRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(255,159,10,0.15)',
+    borderBottomWidth: 1,
   },
   lowStockInfo: {
     flex: 1,
-    paddingRight: 10,
+    marginRight: 10,
   },
   lowStockName: {
     fontSize: 13,
-    color: Colors.text,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   lowStockCode: {
     fontSize: 11,
-    color: Colors.textSecondary,
-    fontFamily: 'monospace',
     marginTop: 2,
   },
   lowStockBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: 6,
   },
   lowStockBadgeText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
-  },
-  moreText: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  actionRow: {
-    flexDirection: 'row',
-    marginHorizontal: -4,
-    marginBottom: 24,
-  },
-  actionBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    height: 48,
-    backgroundColor: Colors.text,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginHorizontal: 4,
-  },
-  actionBtnText: {
-    color: Colors.background,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  scanActionBtn: {
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: Colors.border,
   },
   listHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
-    marginTop: 10,
-    paddingHorizontal: 4,
+    marginHorizontal: 16,
+    marginTop: 18,
+    marginBottom: 6,
   },
   listHeaderTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.textSecondary,
+    fontSize: 13,
+    fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   emptyContainer: {
-    padding: 40,
     alignItems: 'center',
+    paddingVertical: 30,
   },
   emptyText: {
-    color: Colors.textSecondary,
     fontSize: 14,
   },
 });

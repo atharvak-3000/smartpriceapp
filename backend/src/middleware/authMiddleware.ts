@@ -37,6 +37,30 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
   }
 };
 
+// Optional auth middleware (populates req.user if token is present, does not reject if missing)
+export const optionalProtect = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  let token;
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    token = req.headers.authorization.split(' ')[1];
+  }
+
+  if (!token) {
+    return next();
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'supersecretjwtkey123!@#') as { id: string };
+    const user = await User.findById(decoded.id).select('-password');
+    if (user) {
+      req.user = user;
+    }
+    next();
+  } catch (error) {
+    // If token invalid in optionalProtect, proceed as guest
+    next();
+  }
+};
+
 // Grant access to specific roles
 export const authorize = (...roles: string[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction): void => {

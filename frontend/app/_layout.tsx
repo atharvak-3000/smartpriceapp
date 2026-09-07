@@ -4,20 +4,25 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useAuthStore } from '../src/store/useAuthStore';
 import { useProductStore } from '../src/store/useProductStore';
-import { Colors } from '../src/theme/colors';
+import { useThemeStore } from '../src/store/useThemeStore';
+import { useBrandingStore } from '../src/store/useBrandingStore';
+import { useColors } from '../src/theme/colors';
 
 export default function RootLayout() {
   const loadAuth = useAuthStore((state) => state.loadAuth);
   const loadCache = useProductStore((state) => state.loadCache);
   const syncWithServer = useProductStore((state) => state.syncWithServer);
-  
+  const loadTheme = useThemeStore((state) => state.loadTheme);
+  const loadBranding = useBrandingStore((state) => state.loadBranding);
+  const theme = useThemeStore((state) => state.theme);
+  const colors = useColors();
+
   const authLoading = useAuthStore((state) => state.isLoading);
   const productsLoading = useProductStore((state) => state.isLoading);
 
   useEffect(() => {
     const init = async () => {
-      await Promise.all([loadAuth(), loadCache()]);
-      // Background sync on boot — no token needed, products are public
+      await Promise.all([loadAuth(), loadCache(), loadTheme(), loadBranding()]);
       syncWithServer();
     };
     init();
@@ -25,27 +30,27 @@ export default function RootLayout() {
 
   if (authLoading || productsLoading) {
     return (
-      <View style={styles.loaderContainer}>
-        <ActivityIndicator size="large" color={Colors.accent} />
+      <View style={[styles.loaderContainer, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
 
   return (
     <>
-      <StatusBar style="light" />
+      <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
       <Stack
         screenOptions={{
           headerStyle: {
-            backgroundColor: Colors.background,
+            backgroundColor: colors.card,
           },
-          headerTintColor: Colors.text,
+          headerTintColor: colors.text,
           headerTitleStyle: {
             fontWeight: 'bold',
           },
           headerShadowVisible: false,
           contentStyle: {
-            backgroundColor: Colors.background,
+            backgroundColor: colors.background,
           },
         }}
       >
@@ -75,13 +80,6 @@ export default function RootLayout() {
             title: 'Admin Panel',
           }}
         />
-        <Stack.Screen
-          name="scanner"
-          options={{
-            title: 'Scan Barcode',
-            presentation: 'fullScreenModal',
-          }}
-        />
       </Stack>
     </>
   );
@@ -92,6 +90,5 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Colors.background,
   },
 });

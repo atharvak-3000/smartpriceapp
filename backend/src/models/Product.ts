@@ -40,6 +40,18 @@ const ProductSchema = new Schema<IProduct>(
       required: [true, 'Please add a price'],
       min: [0, 'Price must be greater than or equal to 0'],
     },
+    salePrice: {
+      type: Number,
+      min: [0, 'Sale price must be greater than or equal to 0'],
+    },
+    mrpPrice: {
+      type: Number,
+      min: [0, 'MRP price must be greater than or equal to 0'],
+    },
+    wholesalePrice: {
+      type: Number,
+      min: [0, 'Wholesale price must be greater than or equal to 0'],
+    },
     stock: {
       type: Number,
       required: true,
@@ -60,6 +72,19 @@ const ProductSchema = new Schema<IProduct>(
     timestamps: true,
   }
 );
+
+// Synchronize price, salePrice, and mrpPrice
+ProductSchema.pre<IProduct>('save', function (next) {
+  if (this.salePrice !== undefined && this.salePrice !== null) {
+    this.price = this.salePrice;
+  } else if (this.price !== undefined) {
+    this.salePrice = this.price;
+  }
+  if (!this.mrpPrice && this.salePrice) {
+    this.mrpPrice = this.salePrice;
+  }
+  next();
+});
 
 // Indexes for ultra-fast query performance
 ProductSchema.index({ productName: 'text', productCode: 1, barcode: 1 });

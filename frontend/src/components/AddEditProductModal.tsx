@@ -31,18 +31,17 @@ interface AddEditProductModalProps {
   visible: boolean;
   onClose: () => void;
   product?: Product | null;
-  onBarcodeScanRequested?: () => void;
-  scannedBarcode?: string | null;
 }
 
 interface FormData {
   productName: string;
   productCode: string;
-  barcode: string;
   category: string;
   brand: string;
   description: string;
   price: string;
+  mrpPrice: string;
+  wholesalePrice: string;
   stock: string;
 }
 
@@ -50,8 +49,6 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
   visible,
   onClose,
   product,
-  onBarcodeScanRequested,
-  scannedBarcode,
 }) => {
   const token = useAuthStore((state) => state.token);
   const addProductStore = useProductStore((state) => state.addProduct);
@@ -74,11 +71,12 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
     defaultValues: {
       productName: '',
       productCode: '',
-      barcode: '',
       category: '',
       brand: '',
       description: '',
       price: '',
+      mrpPrice: '',
+      wholesalePrice: '',
       stock: '0',
     },
   });
@@ -90,11 +88,12 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
         reset({
           productName: product.productName,
           productCode: product.productCode,
-          barcode: product.barcode || '',
           category: product.category,
           brand: product.brand,
           description: product.description || '',
-          price: product.price.toString(),
+          price: (product.salePrice ?? product.price ?? '').toString(),
+          mrpPrice: (product.mrpPrice ?? product.salePrice ?? product.price ?? '').toString(),
+          wholesalePrice: product.wholesalePrice !== undefined ? product.wholesalePrice.toString() : '',
           stock: (product.stock ?? 0).toString(),
         });
         setImageUrl(product.imageUrl || null);
@@ -103,25 +102,20 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
         reset({
           productName: '',
           productCode: '',
-          barcode: scannedBarcode || '',
           category: '',
           brand: '',
           description: '',
           price: '',
+          mrpPrice: '',
+          wholesalePrice: '',
           stock: '0',
         });
         setImageUrl(null);
         setIsActive(true);
       }
     }
-  }, [product, visible, reset, scannedBarcode]);
+  }, [product, visible, reset]);
 
-  // Set barcode if scanned while modal is active
-  useEffect(() => {
-    if (scannedBarcode) {
-      setValue('barcode', scannedBarcode);
-    }
-  }, [scannedBarcode, setValue]);
 
   const handlePickImage = async () => {
     // Dynamic import to avoid requiring ImagePicker at module level
@@ -180,9 +174,16 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
     setIsSubmitting(true);
     try {
       const API_URL = getApiUrl();
+      const salePriceNum = Number(data.price);
+      const mrpNum = data.mrpPrice ? Number(data.mrpPrice) : salePriceNum;
+      const wholesaleNum = data.wholesalePrice ? Number(data.wholesalePrice) : undefined;
+
       const body = {
         ...data,
-        price: Number(data.price),
+        price: salePriceNum,
+        salePrice: salePriceNum,
+        mrpPrice: mrpNum,
+        wholesalePrice: wholesaleNum,
         stock: Number(data.stock),
         imageUrl: imageUrl || undefined,
         status: isActive ? 'active' : 'inactive',
@@ -375,9 +376,9 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
             })}
 
             <View style={styles.rowFields}>
-              {/* Price */}
+              {/* Sale Price */}
               <View style={[styles.inputGroup, styles.halfField]}>
-                <Text style={styles.label}>Price (₹)</Text>
+                <Text style={styles.label}>Sale Price (₹) *</Text>
                 <Controller
                   control={control}
                   rules={{
@@ -391,7 +392,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
                       onBlur={onBlur}
                       onChangeText={onChange}
                       value={value}
-                      placeholder="1540"
+                      placeholder="e.g. 1540"
                       placeholderTextColor={Colors.textSecondary}
                       keyboardType="numeric"
                     />
@@ -402,7 +403,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
 
               {/* Stock */}
               <View style={[styles.inputGroup, styles.halfField]}>
-                <Text style={styles.label}>Stock Qty</Text>
+                <Text style={styles.label}>Stock Qty (Pcs) *</Text>
                 <Controller
                   control={control}
                   rules={{
@@ -426,31 +427,49 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
               </View>
             </View>
 
-            {/* Barcode */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Barcode (Optional)</Text>
-              <View style={styles.barcodeInputRow}>
+            <View style={styles.rowFields}>
+              {/* MRP Price */}
+              <View style={[styles.inputGroup, styles.halfField]}>
+                <Text style={styles.label}>MRP Price (₹)</Text>
                 <Controller
                   control={control}
-                  name="barcode"
+                  name="mrpPrice"
                   render={({ field: { onChange, onBlur, value } }) => (
                     <TextInput
-                      style={[styles.input, styles.barcodeInput]}
+                      style={styles.input}
                       onBlur={onBlur}
                       onChangeText={onChange}
                       value={value}
-                      placeholder="e.g. 8901786151011"
+                      placeholder="e.g. 1800"
                       placeholderTextColor={Colors.textSecondary}
                       keyboardType="numeric"
                     />
                   )}
                 />
-                <TouchableOpacity onPress={onBarcodeScanRequested} style={styles.scanInlineBtn}>
-                  <CameraIcon size={18} color={Colors.accent} />
-                  <Text style={styles.scanInlineText}>Scan</Text>
-                </TouchableOpacity>
+              </View>
+
+              {/* Wholesale Price */}
+              <View style={[styles.inputGroup, styles.halfField]}>
+                <Text style={styles.label}>Wholesale Price (₹)</Text>
+                <Controller
+                  control={control}
+                  name="wholesalePrice"
+                  render={({ field: { onChange, onBlur, value } }) => (
+                    <TextInput
+                      style={styles.input}
+                      onBlur={onBlur}
+                      onChangeText={onChange}
+                      value={value}
+                      placeholder="e.g. 1300"
+                      placeholderTextColor={Colors.textSecondary}
+                      keyboardType="numeric"
+                    />
+                  )}
+                />
               </View>
             </View>
+
+
 
             {renderField('category', 'Category', {
               placeholder: 'e.g. Wires & Cables',

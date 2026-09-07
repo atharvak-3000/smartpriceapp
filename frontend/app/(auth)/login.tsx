@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { useRouter } from 'expo-router';
-import { Colors } from '../../src/theme/colors';
+import { useColors } from '../../src/theme/colors';
 import { useAuthStore } from '../../src/store/useAuthStore';
 import { getApiUrl } from '../../src/services/api';
 import { Mail, Lock, Eye, EyeOff, ShieldCheck } from 'lucide-react-native';
@@ -28,6 +28,7 @@ const REMEMBER_EMAIL_KEY = 'smartprice_remember_email';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const colors = useColors();
   const { login, isAuthenticated } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -45,7 +46,6 @@ export default function LoginScreen() {
     },
   });
 
-  // Pre-populate email if "Remember Login" was checked
   useEffect(() => {
     const checkRememberedEmail = async () => {
       try {
@@ -58,14 +58,7 @@ export default function LoginScreen() {
       }
     };
     checkRememberedEmail();
-  }, [setValue]);
-
-  // If already authenticated, redirect to admin dashboard
-  useEffect(() => {
-    if (isAuthenticated) {
-      router.replace('/(admin)/dashboard');
-    }
-  }, [isAuthenticated]);
+  }, []);
 
   const onSubmit = async (data: LoginFormData) => {
     setLoading(true);
@@ -85,16 +78,13 @@ export default function LoginScreen() {
         throw new Error(result.message || 'Login failed');
       }
 
-      // Handle remember me state
       if (rememberMe) {
         await AsyncStorage.setItem(REMEMBER_EMAIL_KEY, data.email);
       } else {
         await AsyncStorage.removeItem(REMEMBER_EMAIL_KEY);
       }
 
-      // Save credentials in SecureStore and Zustand store
       await login(result.token, result.user);
-      
       router.replace('/(admin)/dashboard');
     } catch (e: any) {
       Alert.alert('Login Failed', e.message || 'Invalid email or password');
@@ -106,25 +96,33 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
+      style={[styles.container, { backgroundColor: colors.background }]}
     >
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         {/* Brand Logo Header */}
         <View style={styles.headerSection}>
-          <View style={styles.logoBadge}>
-            <ShieldCheck size={40} color={Colors.accent} />
+          <View style={[styles.logoBadge, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <ShieldCheck size={40} color={colors.accent} />
           </View>
-          <Text style={styles.title}>SmartPrice Admin</Text>
-          <Text style={styles.subtitle}>Log in as store owner to modify prices and manage catalog.</Text>
+          <Text style={[styles.title, { color: colors.text }]}>SmartPrice Admin</Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+            Log in as store owner to modify prices, access wholesale rates, and manage catalog.
+          </Text>
         </View>
 
         {/* Form Fields */}
         <View style={styles.formSection}>
           {/* Email */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Email Address</Text>
-            <View style={[styles.inputWrapper, errors.email && styles.inputWrapperError]}>
-              <Mail size={18} color={Colors.textSecondary} style={styles.inputIcon} />
+            <Text style={[styles.label, { color: colors.textSecondary }]}>Email Address</Text>
+            <View
+              style={[
+                styles.inputWrapper,
+                { backgroundColor: colors.inputBackground, borderColor: colors.border },
+                errors.email && { borderColor: colors.error },
+              ]}
+            >
+              <Mail size={18} color={colors.textSecondary} style={styles.inputIcon} />
               <Controller
                 control={control}
                 rules={{
@@ -137,12 +135,12 @@ export default function LoginScreen() {
                 name="email"
                 render={({ field: { onChange, onBlur, value } }) => (
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, { color: colors.text }]}
                     onBlur={onBlur}
                     onChangeText={onChange}
                     value={value}
                     placeholder="owner@smartprice.com"
-                    placeholderTextColor={Colors.textSecondary}
+                    placeholderTextColor={colors.textSecondary}
                     keyboardType="email-address"
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -150,29 +148,40 @@ export default function LoginScreen() {
                 )}
               />
             </View>
-            {errors.email && <Text style={styles.errorText}>{errors.email.message}</Text>}
+            {errors.email && <Text style={[styles.errorText, { color: colors.error }]}>{errors.email.message}</Text>}
           </View>
 
           {/* Password */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Password</Text>
-            <View style={[styles.inputWrapper, errors.password && styles.inputWrapperError]}>
-              <Lock size={18} color={Colors.textSecondary} style={styles.inputIcon} />
+            <Text style={[styles.label, { color: colors.textSecondary }]}>Password</Text>
+            <View
+              style={[
+                styles.inputWrapper,
+                { backgroundColor: colors.inputBackground, borderColor: colors.border },
+                errors.password && { borderColor: colors.error },
+              ]}
+            >
+              <Lock size={18} color={colors.textSecondary} style={styles.inputIcon} />
               <Controller
                 control={control}
-                rules={{ required: 'Password is required' }}
+                rules={{
+                  required: 'Password is required',
+                  minLength: {
+                    value: 6,
+                    message: 'Password must be at least 6 characters',
+                  },
+                }}
                 name="password"
                 render={({ field: { onChange, onBlur, value } }) => (
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, { color: colors.text }]}
                     onBlur={onBlur}
                     onChangeText={onChange}
                     value={value}
-                    placeholder="Password"
-                    placeholderTextColor={Colors.textSecondary}
+                    placeholder="Enter your password"
+                    placeholderTextColor={colors.textSecondary}
                     secureTextEntry={!showPassword}
                     autoCapitalize="none"
-                    autoCorrect={false}
                   />
                 )}
               />
@@ -181,46 +190,59 @@ export default function LoginScreen() {
                 style={styles.eyeBtn}
               >
                 {showPassword ? (
-                  <EyeOff size={18} color={Colors.textSecondary} />
+                  <EyeOff size={18} color={colors.textSecondary} />
                 ) : (
-                  <Eye size={18} color={Colors.textSecondary} />
+                  <Eye size={18} color={colors.textSecondary} />
                 )}
               </TouchableOpacity>
             </View>
-            {errors.password && <Text style={styles.errorText}>{errors.password.message}</Text>}
+            {errors.password && <Text style={[styles.errorText, { color: colors.error }]}>{errors.password.message}</Text>}
           </View>
 
-          {/* Remember Me Checkbox */}
+          {/* Remember Me */}
           <TouchableOpacity
-            activeOpacity={0.8}
             onPress={() => setRememberMe(!rememberMe)}
             style={styles.rememberRow}
           >
-            <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
-              {rememberMe && <View style={styles.checkboxInner} />}
+            <View
+              style={[
+                styles.checkbox,
+                { borderColor: colors.border },
+                rememberMe && { borderColor: colors.accent },
+              ]}
+            >
+              {rememberMe && <View style={[styles.checkboxInner, { backgroundColor: colors.accent }]} />}
             </View>
-            <Text style={styles.rememberText}>Remember my email</Text>
+            <Text style={[styles.rememberText, { color: colors.textSecondary }]}>Remember my email</Text>
           </TouchableOpacity>
 
-          {/* Submit */}
+          {/* Submit Button */}
           <TouchableOpacity
             disabled={loading}
             onPress={handleSubmit(onSubmit)}
-            style={styles.submitBtn}
+            style={[styles.submitBtn, { backgroundColor: colors.accent }]}
           >
             {loading ? (
-              <ActivityIndicator size="small" color={Colors.background} />
+              <ActivityIndicator size="small" color="#FFF" />
             ) : (
-              <Text style={styles.submitBtnText}>Sign In</Text>
+              <Text style={styles.submitBtnText}>Log In as Admin</Text>
             )}
           </TouchableOpacity>
 
-          {/* Cancel */}
+          {/* Staff Login Link */}
           <TouchableOpacity
-            onPress={() => router.back()}
-            style={styles.cancelBtn}
+            onPress={() => router.push('/(auth)/staff-login')}
+            style={styles.staffLinkBtn}
           >
-            <Text style={styles.cancelBtnText}>Back to lookup</Text>
+            <Text style={[styles.staffLinkText, { color: colors.textSecondary }]}>
+              Are you a sales person?{' '}
+              <Text style={{ color: colors.accent, fontWeight: '700' }}>Log in here</Text>
+            </Text>
+          </TouchableOpacity>
+
+          {/* Cancel Button */}
+          <TouchableOpacity onPress={() => router.back()} style={styles.cancelBtn}>
+            <Text style={[styles.cancelBtnText, { color: colors.textSecondary }]}>Cancel & Return to Search</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -231,7 +253,6 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
   },
   scrollContent: {
     flexGrow: 1,
@@ -240,56 +261,46 @@ const styles = StyleSheet.create({
   },
   headerSection: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 32,
   },
   logoBadge: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
-    backgroundColor: Colors.card,
+    width: 76,
+    height: 76,
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: Colors.border,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
   },
   title: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: Colors.text,
-    marginBottom: 8,
+    fontWeight: '800',
+    marginBottom: 6,
   },
   subtitle: {
-    fontSize: 14,
-    color: Colors.textSecondary,
+    fontSize: 13,
     textAlign: 'center',
-    lineHeight: 20,
-    paddingHorizontal: 16,
+    lineHeight: 18,
+    paddingHorizontal: 12,
   },
   formSection: {
     width: '100%',
   },
   inputGroup: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   label: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.textSecondary,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.inputBackground,
     borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 8,
+    borderRadius: 12,
     paddingHorizontal: 12,
     height: 48,
-  },
-  inputWrapperError: {
-    borderColor: Colors.error,
   },
   inputIcon: {
     marginRight: 10,
@@ -297,21 +308,19 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 15,
-    color: Colors.text,
     height: '100%',
   },
   eyeBtn: {
     padding: 8,
   },
   errorText: {
-    color: Colors.error,
     fontSize: 12,
     marginTop: 4,
   },
   rememberRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
     paddingVertical: 4,
   },
   checkbox: {
@@ -319,48 +328,47 @@ const styles = StyleSheet.create({
     height: 18,
     borderRadius: 4,
     borderWidth: 1.5,
-    borderColor: Colors.border,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 8,
-  },
-  checkboxChecked: {
-    borderColor: Colors.accent,
   },
   checkboxInner: {
     width: 10,
     height: 10,
     borderRadius: 2,
-    backgroundColor: Colors.accent,
   },
   rememberText: {
     fontSize: 13,
-    color: Colors.textSecondary,
   },
   submitBtn: {
     height: 48,
-    backgroundColor: Colors.text, // White button
-    borderRadius: 8,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: Colors.text,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 6,
-    elevation: 4,
+    elevation: 3,
   },
   submitBtnText: {
-    color: Colors.background, // Black text
+    color: '#FFFFFF',
     fontSize: 15,
-    fontWeight: 'bold',
+    fontWeight: '700',
+  },
+  staffLinkBtn: {
+    marginTop: 18,
+    alignItems: 'center',
+  },
+  staffLinkText: {
+    fontSize: 13,
   },
   cancelBtn: {
-    marginTop: 16,
+    marginTop: 14,
     alignItems: 'center',
     paddingVertical: 10,
   },
   cancelBtnText: {
-    color: Colors.textSecondary,
-    fontSize: 14,
+    fontSize: 13,
   },
 });

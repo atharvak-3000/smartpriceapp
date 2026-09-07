@@ -10,15 +10,21 @@ import {
   Animated,
   ActivityIndicator,
   RefreshControl,
-  SafeAreaView
+  SafeAreaView,
+  Image,
 } from 'react-native';
 import { useRouter, useNavigation } from 'expo-router';
-import { Colors } from '../src/theme/colors';
+import { useColors } from '../src/theme/colors';
+import { useThemeStore } from '../src/store/useThemeStore';
+import { useBrandingStore } from '../src/store/useBrandingStore';
 import { useProductStore, Product } from '../src/store/useProductStore';
 import { useAuthStore } from '../src/store/useAuthStore';
 import { ProductCard } from '../src/components/ProductCard';
 import { ProductDetailSheet } from '../src/components/ProductDetailSheet';
 import { StockUpdateModal } from '../src/components/StockUpdateModal';
+import { QuickPriceModal } from '../src/components/QuickPriceModal';
+import { QuotationMakerModal } from '../src/components/QuotationMakerModal';
+import { BrandStockInfographic } from '../src/components/BrandStockInfographic';
 import {
   Search,
   ScanBarcode,
@@ -27,13 +33,31 @@ import {
   RotateCw,
   User,
   Shield,
-  X
+  X,
+  FileText,
+  Sun,
+  Moon,
 } from 'lucide-react-native';
+
+const SearchIcon = Search as any;
+const ScanBarcodeIcon = ScanBarcode as any;
+const SlidersHorizontalIcon = SlidersHorizontal as any;
+const ChevronDownIcon = ChevronDown as any;
+const RotateCwIcon = RotateCw as any;
+const UserIcon = User as any;
+const ShieldIcon = Shield as any;
+const XIcon = X as any;
+const FileTextIcon = FileText as any;
+const SunIcon = Sun as any;
+const MoonIcon = Moon as any;
 
 export default function SearchScreen() {
   const router = useRouter();
   const navigation = useNavigation();
-  
+  const colors = useColors();
+  const { theme, toggleTheme, loadTheme } = useThemeStore();
+  const branding = useBrandingStore();
+
   const products = useProductStore((state) => state.products);
   const isSyncing = useProductStore((state) => state.isSyncing);
   const syncError = useProductStore((state) => state.syncError);
@@ -43,26 +67,33 @@ export default function SearchScreen() {
   const searchQuery = useProductStore((state) => state.searchQuery);
   const selectedCategory = useProductStore((state) => state.selectedCategory);
   const sortBy = useProductStore((state) => state.sortBy);
-  
+
   const setSearchQuery = useProductStore((state) => state.setSearchQuery);
   const setSelectedCategory = useProductStore((state) => state.setSelectedCategory);
   const setSortBy = useProductStore((state) => state.setSortBy);
   const getFilteredProducts = useProductStore((state) => state.getFilteredProducts);
   const getCategories = useProductStore((state) => state.getCategories);
 
-  const { isAuthenticated, isOwner } = useAuthStore();
+  const { isAuthenticated, isOwner, user, token } = useAuthStore();
 
   const [showSortOptions, setShowSortOptions] = useState(false);
   const [localQuery, setLocalQuery] = useState(searchQuery);
 
-  // Detail & stock modal state
+  // Modals state
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [detailVisible, setDetailVisible] = useState(false);
   const [stockModalVisible, setStockModalVisible] = useState(false);
+  const [stockModalProduct, setStockModalProduct] = useState<Product | null>(null);
+  const [quickPriceModalVisible, setQuickPriceModalVisible] = useState(false);
+  const [quickPriceProduct, setQuickPriceProduct] = useState<Product | null>(null);
+  const [quotationModalVisible, setQuotationModalVisible] = useState(false);
+  const [quotePrefillProduct, setQuotePrefillProduct] = useState<Product | null>(null);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    loadTheme();
+    branding.loadBranding();
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 600,
@@ -70,23 +101,69 @@ export default function SearchScreen() {
     }).start();
   }, []);
 
-  // Header auth button
+  // Header navigation buttons (Theme, Quotation, Login/Admin)
   useEffect(() => {
     navigation.setOptions({
+      headerTitle: () => (
+        <View style={styles.headerTitleWrap}>
+          {branding.logoUri ? (
+            <Image source={{ uri: branding.logoUri }} style={styles.headerLogo} resizeMode="contain" />
+          ) : null}
+          <Text style={[styles.headerTitleText, { color: colors.text }]}>
+            {branding.storeName || 'SmartPrice'}
+          </Text>
+        </View>
+      ),
       headerRight: () => (
-        <TouchableOpacity
-          onPress={() => router.push(isAuthenticated ? '/(admin)/dashboard' : '/(auth)/login')}
-          style={styles.headerBtn}
-        >
-          {isAuthenticated ? (
-            <Shield size={20} color={Colors.accent as any} />
-          ) : (
-            <User size={20} color={Colors.text as any} />
-          )}
-        </TouchableOpacity>
+        <View style={styles.headerButtonsRow}>
+          {/* Theme Switcher Pill */}
+          <TouchableOpacity
+            onPress={toggleTheme}
+            style={[
+              styles.themePillBtn,
+              { backgroundColor: colors.inputBackground, borderColor: colors.border },
+            ]}
+          >
+            {theme === 'dark' ? (
+              <>
+                <SunIcon size={14} color="#FFD60A" style={{ marginRight: 4 }} />
+                <Text style={[styles.themePillText, { color: colors.text }]}>Light</Text>
+              </>
+            ) : (
+              <>
+                <MoonIcon size={14} color="#5856D6" style={{ marginRight: 4 }} />
+                <Text style={[styles.themePillText, { color: colors.text }]}>Dark</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          {/* New Quotation Button */}
+          <TouchableOpacity
+            onPress={() => {
+              setQuotePrefillProduct(null);
+              setQuotationModalVisible(true);
+            }}
+            style={[styles.quoteHeaderBtn, { backgroundColor: colors.accentLight }]}
+          >
+            <FileTextIcon size={16} color={colors.accent} style={{ marginRight: 4 }} />
+            <Text style={[styles.quoteHeaderText, { color: colors.accent }]}>Quote</Text>
+          </TouchableOpacity>
+
+          {/* Auth Button */}
+          <TouchableOpacity
+            onPress={() => router.push(isAuthenticated ? '/(admin)/dashboard' : '/(auth)/login')}
+            style={styles.headerBtn}
+          >
+            {isAuthenticated ? (
+              <ShieldIcon size={20} color={colors.accent} />
+            ) : (
+              <UserIcon size={20} color={colors.text} />
+            )}
+          </TouchableOpacity>
+        </View>
       ),
     });
-  }, [isAuthenticated, navigation]);
+  }, [isAuthenticated, colors, theme, branding.storeName, branding.logoUri, navigation]);
 
   const handleSearchChange = (text: string) => {
     setLocalQuery(text);
@@ -118,8 +195,34 @@ export default function SearchScreen() {
   };
 
   const handleStockUpdateFromDetail = () => {
-    setDetailVisible(false);
+    if (selectedProduct) {
+      setStockModalProduct(selectedProduct);
+      setDetailVisible(false);
+      setStockModalVisible(true);
+    }
+  };
+
+  const handleQuickPriceFromDetail = () => {
+    if (selectedProduct) {
+      setQuickPriceProduct(selectedProduct);
+      setDetailVisible(false);
+      setQuickPriceModalVisible(true);
+    }
+  };
+
+  const handleQuickPriceFromCard = (product: Product) => {
+    setQuickPriceProduct(product);
+    setQuickPriceModalVisible(true);
+  };
+
+  const handleQuickStockFromCard = (product: Product) => {
+    setStockModalProduct(product);
     setStockModalVisible(true);
+  };
+
+  const handleAddToQuote = (product: Product) => {
+    setQuotePrefillProduct(product);
+    setQuotationModalVisible(true);
   };
 
   const filteredProducts = getFilteredProducts();
@@ -130,6 +233,9 @@ export default function SearchScreen() {
       product={item}
       onPress={() => handleCardPress(item)}
       showChevron={true}
+      onQuickPrice={isOwner() ? handleQuickPriceFromCard : undefined}
+      onQuickStock={handleQuickStockFromCard}
+      onAddToQuote={handleAddToQuote}
     />
   );
 
@@ -147,59 +253,54 @@ export default function SearchScreen() {
     { key: 'stock_desc', label: 'Stock (High-Low)' },
   ] as const;
 
-  const currentSortLabel = SORT_OPTIONS.find(o => o.key === sortBy)?.label || 'Sort';
+  const currentSortLabel = SORT_OPTIONS.find((o) => o.key === sortBy)?.label || 'Sort';
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <Animated.View style={[styles.mainView, { opacity: fadeAnim }]}>
-
         {/* Sync Info Header */}
         <View style={styles.syncContainer}>
-          <Text style={styles.syncText}>
+          <Text style={[styles.syncText, { color: colors.textSecondary }]}>
             {syncError
               ? `${syncError}`
               : lastSynced
-                ? `Last Synced: ${lastSynced}`
-                : 'Not Synced'}
+              ? `Last Synced: ${lastSynced}`
+              : 'Not Synced'}
           </Text>
           <TouchableOpacity
             disabled={isSyncing}
-            onPress={() => syncWithServer()}
+            onPress={() => syncWithServer(token)}
             style={styles.syncBtn}
           >
             {isSyncing ? (
-              <ActivityIndicator size="small" color={Colors.accent} />
+              <ActivityIndicator size="small" color={colors.accent} />
             ) : (
-              <RotateCw size={12} color={Colors.textSecondary as any} />
+              <RotateCwIcon size={12} color={colors.textSecondary} />
             )}
           </TouchableOpacity>
         </View>
 
-        {/* Search Bar Group */}
+        {/* Search Bar */}
         <View style={styles.searchBarRow}>
-          <View style={styles.searchContainer}>
-            <Search size={18} color={Colors.textSecondary as any} style={styles.searchIcon} />
+          <View style={[styles.searchContainer, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}>
+            <SearchIcon size={18} color={colors.textSecondary} style={styles.searchIcon} />
             <TextInput
               value={localQuery}
               onChangeText={handleSearchChange}
-              placeholder="Search Name, Code, or Barcode..."
-              placeholderTextColor={Colors.textSecondary}
-              style={styles.searchInput}
+              placeholder="Search products by name, code or brand..."
+              placeholderTextColor={colors.textSecondary}
+              style={[styles.searchInput, { color: colors.text }]}
             />
             {localQuery.length > 0 && (
               <TouchableOpacity onPress={handleClearSearch} style={styles.clearBtn}>
-                <X size={16} color={Colors.textSecondary as any} />
+                <XIcon size={16} color={colors.textSecondary} />
               </TouchableOpacity>
             )}
           </View>
-          
-          <TouchableOpacity
-            onPress={() => router.push('/scanner')}
-            style={styles.scanBtn}
-          >
-            <ScanBarcode size={22} color={Colors.background as any} />
-          </TouchableOpacity>
         </View>
+
+        {/* Brand Stock Infographic Widget (Shows Brand Stock Pieces & Quick Filter) */}
+        <BrandStockInfographic />
 
         {/* Categories Scroller */}
         <View style={styles.categoriesRow}>
@@ -216,13 +317,16 @@ export default function SearchScreen() {
                   onPress={() => handleCategoryPress(cat)}
                   style={[
                     styles.categoryTab,
-                    isSelected && styles.categoryTabSelected,
+                    {
+                      backgroundColor: isSelected ? colors.accent : colors.card,
+                      borderColor: isSelected ? colors.accent : colors.border,
+                    },
                   ]}
                 >
                   <Text
                     style={[
                       styles.categoryText,
-                      isSelected && styles.categoryTextSelected,
+                      { color: isSelected ? '#FFFFFF' : colors.textSecondary },
                     ]}
                   >
                     {cat}
@@ -235,30 +339,41 @@ export default function SearchScreen() {
 
         {/* Filters and Sorting Bar */}
         <View style={styles.filterBar}>
-          <Text style={styles.resultsCount}>
+          <Text style={[styles.resultsCount, { color: colors.textSecondary }]}>
             {filteredProducts.length} {filteredProducts.length === 1 ? 'Product' : 'Products'}
           </Text>
-          
+
           <TouchableOpacity
             onPress={() => setShowSortOptions(!showSortOptions)}
             style={styles.sortToggle}
           >
-            <SlidersHorizontal size={14} color={Colors.accent as any} style={{ marginRight: 6 }} />
-            <Text style={styles.sortToggleText}>{currentSortLabel}</Text>
-            <ChevronDown size={14} color={Colors.textSecondary as any} style={{ marginLeft: 4 }} />
+            <SlidersHorizontalIcon size={14} color={colors.accent} style={{ marginRight: 6 }} />
+            <Text style={[styles.sortToggleText, { color: colors.accent }]}>{currentSortLabel}</Text>
+            <ChevronDownIcon size={14} color={colors.textSecondary} style={{ marginLeft: 4 }} />
           </TouchableOpacity>
         </View>
 
         {/* Sorting Dropdown */}
         {showSortOptions && (
-          <View style={styles.sortDropdown}>
+          <View style={[styles.sortDropdown, { backgroundColor: colors.card, borderColor: colors.border }]}>
             {SORT_OPTIONS.map((opt) => (
               <TouchableOpacity
                 key={opt.key}
-                onPress={() => { setSortBy(opt.key); setShowSortOptions(false); }}
-                style={[styles.sortOption, sortBy === opt.key && styles.sortOptionSelected]}
+                onPress={() => {
+                  setSortBy(opt.key);
+                  setShowSortOptions(false);
+                }}
+                style={[
+                  styles.sortOption,
+                  sortBy === opt.key && { backgroundColor: colors.accentLight },
+                ]}
               >
-                <Text style={[styles.sortOptionText, sortBy === opt.key && styles.sortOptionTextSelected]}>
+                <Text
+                  style={[
+                    styles.sortOptionText,
+                    { color: sortBy === opt.key ? colors.accent : colors.text },
+                  ]}
+                >
                   {opt.label}
                 </Text>
               </TouchableOpacity>
@@ -280,15 +395,15 @@ export default function SearchScreen() {
           refreshControl={
             <RefreshControl
               refreshing={isSyncing}
-              onRefresh={() => syncWithServer()}
-              tintColor={Colors.accent}
-              colors={[Colors.accent]}
+              onRefresh={() => syncWithServer(token)}
+              tintColor={colors.accent}
+              colors={[colors.accent]}
             />
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyTitle}>No Products Found</Text>
-              <Text style={styles.emptySubtitle}>
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>No Products Found</Text>
+              <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
                 Try adjusting your search filters or check your spelling.
               </Text>
             </View>
@@ -296,21 +411,48 @@ export default function SearchScreen() {
         />
       </Animated.View>
 
-      {/* Product Detail Sheet — opens for everyone */}
+      {/* Product Detail Sheet */}
       <ProductDetailSheet
         visible={detailVisible}
         product={selectedProduct}
         onClose={() => setDetailVisible(false)}
-        isOwner={isOwner()}
-        onEdit={handleEditFromDetail}
+        onEdit={isOwner() ? handleEditFromDetail : undefined}
         onStockUpdate={handleStockUpdateFromDetail}
+        onQuickPrice={isOwner() ? handleQuickPriceFromDetail : undefined}
+        onAddToQuote={() => {
+          if (selectedProduct) handleAddToQuote(selectedProduct);
+        }}
+        isOwner={isOwner()}
       />
 
-      {/* Stock Update Modal — owner only */}
+      {/* Quick Price Modal (Admin Only) */}
+      <QuickPriceModal
+        visible={quickPriceModalVisible}
+        product={quickPriceProduct}
+        onClose={() => {
+          setQuickPriceModalVisible(false);
+          setQuickPriceProduct(null);
+        }}
+      />
+
+      {/* Quick Stock Modal (Admin & Sales Person) */}
       <StockUpdateModal
         visible={stockModalVisible}
-        product={selectedProduct}
-        onClose={() => setStockModalVisible(false)}
+        product={stockModalProduct}
+        onClose={() => {
+          setStockModalVisible(false);
+          setStockModalProduct(null);
+        }}
+      />
+
+      {/* Quotation Maker Modal */}
+      <QuotationMakerModal
+        visible={quotationModalVisible}
+        preselectedProduct={quotePrefillProduct}
+        onClose={() => {
+          setQuotationModalVisible(false);
+          setQuotePrefillProduct(null);
+        }}
       />
     </SafeAreaView>
   );
@@ -319,48 +461,83 @@ export default function SearchScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
   },
   mainView: {
     flex: 1,
   },
+  headerTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerLogo: {
+    width: 26,
+    height: 26,
+    borderRadius: 6,
+  },
+  headerTitleText: {
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  headerButtonsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   headerBtn: {
-    padding: 8,
-    marginRight: 8,
+    padding: 6,
+  },
+  themePillBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  themePillText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  quoteHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  quoteHeaderText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   syncContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    backgroundColor: '#0A0A0A',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.border,
+    justifyContent: 'center',
+    paddingVertical: 4,
+    gap: 6,
   },
   syncText: {
     fontSize: 11,
-    color: Colors.textSecondary,
   },
   syncBtn: {
-    padding: 4,
+    padding: 2,
   },
   searchBarRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 10,
+    marginTop: 6,
+    marginBottom: 6,
   },
   searchContainer: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    height: 48,
-    backgroundColor: Colors.inputBackground,
+    height: 46,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 10,
     paddingHorizontal: 12,
   },
   searchIcon: {
@@ -369,49 +546,25 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 15,
-    color: Colors.text,
-    height: '100%',
   },
   clearBtn: {
     padding: 4,
   },
-  scanBtn: {
-    width: 48,
-    height: 48,
-    backgroundColor: Colors.text,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 10,
-  },
   categoriesRow: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.border,
+    marginBottom: 6,
   },
   categoriesScroll: {
-    paddingHorizontal: 12,
-    paddingBottom: 12,
+    paddingHorizontal: 16,
+    gap: 8,
   },
   categoryTab: {
     paddingHorizontal: 14,
     paddingVertical: 7,
-    borderRadius: 8,
-    backgroundColor: '#161616',
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: Colors.border,
-    marginHorizontal: 4,
-  },
-  categoryTabSelected: {
-    borderColor: Colors.accent,
-    backgroundColor: Colors.accentLight,
   },
   categoryText: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    fontWeight: '500',
-  },
-  categoryTextSelected: {
-    color: Colors.accent,
+    fontSize: 12,
     fontWeight: '600',
   },
   filterBar: {
@@ -419,70 +572,56 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 6,
   },
   resultsCount: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
-    color: Colors.textSecondary,
   },
   sortToggle: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#161616',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: Colors.border,
   },
   sortToggleText: {
     fontSize: 12,
-    fontWeight: '600',
-    color: Colors.text,
+    fontWeight: '700',
   },
   sortDropdown: {
     marginHorizontal: 16,
-    marginBottom: 10,
-    backgroundColor: '#1C1C1E',
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 8,
     overflow: 'hidden',
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
   },
   sortOption: {
-    padding: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.border,
-  },
-  sortOptionSelected: {
-    backgroundColor: 'rgba(10, 132, 255, 0.05)',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
   },
   sortOptionText: {
     fontSize: 13,
-    color: Colors.textSecondary,
-  },
-  sortOptionTextSelected: {
-    color: Colors.accent,
     fontWeight: '600',
   },
   listContainer: {
     paddingBottom: 20,
   },
   emptyContainer: {
-    padding: 40,
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 50,
+    paddingHorizontal: 30,
   },
   emptyTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.text,
-    marginBottom: 8,
+    fontSize: 17,
+    fontWeight: '700',
+    marginBottom: 6,
   },
   emptySubtitle: {
     fontSize: 13,
-    color: Colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 18,
   },
 });

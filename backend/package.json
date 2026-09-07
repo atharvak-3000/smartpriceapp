@@ -10,7 +10,8 @@
     "seed": "ts-node src/scripts/seed.ts",
     "seed-1000": "ts-node src/scripts/seed1000.ts",
     "gen-sample-excel": "ts-node src/scripts/generateSampleExcel.ts",
-    "import-excel": "ts-node src/scripts/importExcel.ts"
+    "import-excel": "ts-node src/scripts/importExcel.ts",
+    "test:api": "node src/scripts/test-api.js"
   },
   "dependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -19,7 +20,6 @@
     "@types/jsonwebtoken": "^9.0.6",
     "@types/multer": "^2.2.0",
     "@types/node": "^20.14.2",
-    "@types/react": "~19.2.14",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",

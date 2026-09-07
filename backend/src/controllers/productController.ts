@@ -1,16 +1,35 @@
 import { Request, Response } from 'express';
 import Product from '../models/Product';
+import { AuthRequest } from '../middleware/authMiddleware';
+
+// Helper to format product based on user role (Access Control: Sales person cannot view wholesalePrice)
+const formatProductForRole = (doc: any, isSalesPerson: boolean) => {
+  const p = doc.toObject ? doc.toObject() : { ...doc };
+  p.salePrice = p.salePrice !== undefined && p.salePrice !== null ? p.salePrice : p.price;
+  p.mrpPrice = p.mrpPrice !== undefined && p.mrpPrice !== null ? p.mrpPrice : p.salePrice;
+  p.price = p.salePrice;
+
+  if (isSalesPerson) {
+    delete p.wholesalePrice;
+  }
+  return p;
+};
 
 // @desc    Get all products (or sync)
 // @route   GET /products
 // @access  Public
-export const getProducts = async (req: Request, res: Response): Promise<void> => {
+export const getProducts = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const products = await Product.find({}).sort({ productName: 1 });
+    const userRole = req.user?.role;
+    const isSalesPerson = userRole === 'staff' || userRole === 'salesperson';
+
+    const formatted = products.map((p) => formatProductForRole(p, isSalesPerson));
+
     res.status(200).json({
       success: true,
-      count: products.length,
-      data: products,
+      count: formatted.length,
+      data: formatted,
     });
   } catch (error) {
     res.status(500).json({
@@ -24,7 +43,7 @@ export const getProducts = async (req: Request, res: Response): Promise<void> =>
 // @desc    Search products on server
 // @route   GET /products/search
 // @access  Public
-export const searchProducts = async (req: Request, res: Response): Promise<void> => {
+export const searchProducts = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { q } = req.query;
 
@@ -44,10 +63,14 @@ export const searchProducts = async (req: Request, res: Response): Promise<void>
       ],
     }).sort({ productName: 1 });
 
+    const userRole = req.user?.role;
+    const isSalesPerson = userRole === 'staff' || userRole === 'salesperson';
+    const formatted = products.map((p) => formatProductForRole(p, isSalesPerson));
+
     res.status(200).json({
       success: true,
-      count: products.length,
-      data: products,
+      count: formatted.length,
+      data: formatted,
     });
   } catch (error) {
     res.status(500).json({
@@ -60,10 +83,25 @@ export const searchProducts = async (req: Request, res: Response): Promise<void>
 
 // @desc    Create a product
 // @route   POST /products
-// @access  Private (Owner only)
+// @access  Private (Owner/Admin only)
 export const createProduct = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { productName, productCode, barcode, category, brand, description, price, stock, imageUrl, status } = req.body;
+    const {
+      productName,
+      productCode,
+      barcode,
+      category,
+      brand,
+      description,
+      price,
+      salePrice,
+      mrpPrice,
+      wholesalePrice,
+      stock,
+      imageUrl,
+      status,
+    } = req.body;
+
     const formattedCode = productCode.toUpperCase().trim();
     const formattedBarcode = barcode && barcode.trim() !== '' ? barcode.trim() : undefined;
 
@@ -82,6 +120,11 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
       }
     }
 
+    const effectiveSalePrice = salePrice !== undefined ? Number(salePrice) : Number(price || 0);
+    const effectivePrice = effectiveSalePrice;
+    const effectiveMrp = mrpPrice !== undefined ? Number(mrpPrice) : effectiveSalePrice;
+    const effectiveWholesale = wholesalePrice !== undefined ? Number(wholesalePrice) : undefined;
+
     const product = await Product.create({
       productName,
       productCode: formattedCode,
@@ -89,7 +132,10 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
       category,
       brand,
       description: description?.trim() || undefined,
-      price: Number(price),
+      price: effectivePrice,
+      salePrice: effectiveSalePrice,
+      mrpPrice: effectiveMrp,
+      wholesalePrice: effectiveWholesale,
       stock: stock !== undefined ? Number(stock) : 0,
       imageUrl: imageUrl?.trim() || undefined,
       status: status || 'active',
@@ -110,13 +156,27 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
 
 // @desc    Update a product
 // @route   PUT /products/:id
-// @access  Private (Owner only)
+// @access  Private (Owner/Admin only)
 export const updateProduct = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { productName, productCode, barcode, category, brand, description, price, stock, imageUrl, status } = req.body;
+    const {
+      productName,
+      productCode,
+      barcode,
+      category,
+      brand,
+      description,
+      price,
+      salePrice,
+      mrpPrice,
+      wholesalePrice,
+      stock,
+      imageUrl,
+      status,
+    } = req.body;
+
     const formattedCode = productCode ? productCode.toUpperCase().trim() : undefined;
-    const formattedBarcode = barcode !== undefined ? (barcode.trim() !== '' ? barcode.trim() : undefined) : undefined;
 
     let product = await Product.findById(id);
 
@@ -147,15 +207,26 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
       }
     }
 
+    const effectiveSalePrice = salePrice !== undefined ? Number(salePrice) : (price !== undefined ? Number(price) : undefined);
+
     const updateData: any = {
       productName,
       category,
       brand,
-      price: price !== undefined ? Number(price) : undefined,
       stock: stock !== undefined ? Number(stock) : undefined,
       status: status || undefined,
     };
 
+    if (effectiveSalePrice !== undefined) {
+      updateData.salePrice = effectiveSalePrice;
+      updateData.price = effectiveSalePrice;
+    }
+    if (mrpPrice !== undefined) {
+      updateData.mrpPrice = Number(mrpPrice);
+    }
+    if (wholesalePrice !== undefined) {
+      updateData.wholesalePrice = Number(wholesalePrice);
+    }
     if (description !== undefined) {
       updateData.description = description.trim() !== '' ? description.trim() : undefined;
     }
@@ -166,7 +237,7 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
       updateData.productCode = formattedCode;
     }
 
-    // Remove undefined keys so we don't overwrite with undefined
+    // Remove undefined keys
     Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
 
     const updateQuery: any = { $set: updateData };
@@ -197,9 +268,57 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
   }
 };
 
-// @desc    Update stock quantity (increment or decrement)
+// @desc    Quick update product prices (Easy Price Updation for MRP, Wholesale, Sale Price)
+// @route   PATCH /products/:id/quick-price
+// @access  Private (Owner/Admin only)
+export const quickUpdatePrice = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { mrpPrice, wholesalePrice, salePrice } = req.body;
+
+    const product = await Product.findById(id);
+    if (!product) {
+      res.status(404).json({ success: false, message: 'Product not found' });
+      return;
+    }
+
+    const updateData: any = {};
+
+    if (salePrice !== undefined) {
+      const numSale = Number(salePrice);
+      updateData.salePrice = numSale;
+      updateData.price = numSale;
+    }
+    if (mrpPrice !== undefined) {
+      updateData.mrpPrice = Number(mrpPrice);
+    }
+    if (wholesalePrice !== undefined) {
+      updateData.wholesalePrice = Number(wholesalePrice);
+    }
+
+    const updatedProduct = await Product.findByIdAndUpdate(
+      id,
+      { $set: updateData },
+      { new: true, runValidators: true }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Prices updated successfully',
+      data: updatedProduct,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to quick-update price',
+      error: error instanceof Error ? error.message : error,
+    });
+  }
+};
+
+// @desc    Update stock quantity (increment or decrement or absolute)
 // @route   PATCH /products/:id/stock
-// @access  Private (Owner only)
+// @access  Private (Admin, Owner, Staff, Sales Person)
 export const updateStock = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
@@ -218,7 +337,7 @@ export const updateStock = async (req: Request, res: Response): Promise<void> =>
       // Set stock to an absolute value (e.g., stock-take / full count)
       newStock = Math.max(0, Number(absolute));
     } else if (delta !== undefined) {
-      // Increment or decrement relative to current stock
+      // Increment or decrement relative to current stock (e.g. customer bought 3)
       newStock = Math.max(0, product.stock + Number(delta));
     } else {
       res.status(400).json({ success: false, message: 'Provide either delta or absolute stock value' });
@@ -246,7 +365,7 @@ export const updateStock = async (req: Request, res: Response): Promise<void> =>
 
 // @desc    Delete a product
 // @route   DELETE /products/:id
-// @access  Private (Owner only)
+// @access  Private (Owner/Admin only)
 export const deleteProduct = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;

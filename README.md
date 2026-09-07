@@ -1,231 +1,257 @@
-# SmartPrice: Electrical Shop Price Lookup Mobile App
+# ⚡ SmartPrice — Smart Retail & Electrical Shop Management Platform
 
-SmartPrice is a production-ready mobile application and REST backend designed for electrical product shops. It features instant search, offline mode caching (supporting 10,000+ items), barcode scanning, and role-based permissions (employees lookup prices; owners manage the catalog).
+A high-performance, modern full-stack web and mobile application engineered for electrical and retail product stores. Built with **React Native / Expo (Web + iOS + Android)** and **Node.js / Express / MongoDB**, SmartPrice delivers rapid price lookups, multi-tier pricing, quotation generation with WhatsApp sharing, fast stock counter release (+/-), brand distribution infographics, and a crisp dual Light/Dark theme.
 
 ---
 
-## 📂 Folder Structure
+## 🌟 Key Highlights & Features
+
+- **⚡ Quick Price Changes**: Update MRP, Wholesale, and Sale Price directly via a 1-tap modal without editing cumbersome full-page forms.
+- **📄 Quotation & Bill Maker**:
+  - Add multiple products to a quote with custom quantities.
+  - Automatically calculates Subtotal, Discount %, Subtotal after Discount, SGST (9%), CGST (9%), and Grand Total.
+  - 1-Tap **WhatsApp Share**: Formats a professional invoice text ready to send to customers.
+  - **1-Tap Inventory Deduction**: Automatically deducts all quoted items from live stock.
+- **📦 Stock Management & Counter Sales (+ / -)**:
+  - Both **Admin** and **Salesperson / Staff** can instantly add or release stock.
+  - Quick action chips (`-1`, `-2`, `-3`, `-5`, `-10`, `+1`, `+5`, `+10`) plus direct quantity entry for fast customer counter sales.
+- **📊 Brand Stock Infographics**:
+  - Visual distribution cards showing stock quantity and item counts per brand (e.g. Philips, Havells, Legrand, Anchor, Polycab).
+  - Visual percentage progress bars with instant 1-tap brand filtering.
+- **🔐 3-Tier Role-Based Security**:
+  - **MRP Price**, **Wholesale Price**, and **Sale Price**.
+  - **Admin / Owner**: Can view and edit all 3 price tiers, manage inventory, and access the admin dashboard.
+  - **Salesperson / Staff**: Can only see the **Sale Price**. The Wholesale Price is masked at both backend and frontend layers for maximum confidentiality.
+- **🎨 Modern Dual Theme**:
+  - **Dark Mode**: Sleek deep midnight theme (`#030712`, `#0B1220`).
+  - **Light Mode**: High-contrast, clean slate & pure white theme (`#F8FAFC`, `#FFFFFF`).
+  - Instant 1-tap theme toggle pill saved to device storage.
+- **🏪 Store Logo & Custom Branding**:
+  - Upload custom shop logo, configure Store Name, Phone Number, Shop Address, and GSTIN.
+  - Automatically reflected across the app and in generated Quotation headers.
+- **📱 Universal Deployment**:
+  - **Web**: Instant deployment on Vercel, Netlify, or Render Static Site (`npx expo export -p web`).
+  - **Mobile**: Native Android APK / AAB and iOS builds via Expo EAS.
+  - **Backend**: Containerized Docker image, Render Blueprint, Railway, or standalone Node.js.
+
+---
+
+## 📂 Repository Structure
 
 ```text
 smartprice/
+├── .gitignore                  # Comprehensive production gitignore rules
+├── docker-compose.yml          # 1-command full-stack container orchestration
+├── render.yaml                 # Render.com Blueprint deployment specification
+├── README.md                   # Complete documentation & deployment guide
 ├── backend/
-│   ├── src/
-│   │   ├── config/
-│   │   │   ├── db.ts           # MongoDB and Mongoose config
-│   │   │   └── jsonDb.ts       # Local file fallback database (db.json)
-│   │   ├── controllers/
-│   │   │   ├── authController.ts
-│   │   │   └── productController.ts
-│   │   ├── middleware/
-│   │   │   └── authMiddleware.ts
-│   │   ├── models/
-│   │   │   ├── Product.ts
-│   │   │   └── User.ts
-│   │   ├── routes/
-│   │   │   ├── authRoutes.ts
-│   │   │   └── productRoutes.ts
-│   │   ├── scripts/
-│   │   │   ├── seed.ts         # Initial mock seeder
-│   │   │   └── test-api.js     # API route test runner
-│   │   ├── types/
-│   │   │   └── index.ts        # TypeScript Interfaces
-│   │   ├── app.ts
-│   │   └── server.ts
-│   ├── package.json
-│   ├── tsconfig.json
-│   └── .env
+│   ├── Dockerfile              # Multi-stage production container image
+│   ├── .env.example            # Environment variable template
+│   ├── package.json            # Scripts & backend dependencies
+│   ├── tsconfig.json           # Backend TypeScript configuration
+│   ├── uploads/                # Directory for user-uploaded product images
+│   │   └── products/.gitkeep
+│   └── src/
+│       ├── app.ts              # Express application, CORS, health endpoints
+│       ├── server.ts           # HTTP server entry point & MongoDB connection
+│       ├── config/
+│       │   └── db.ts           # MongoDB Atlas connection handler
+│       ├── controllers/
+│       │   ├── authController.ts
+│       │   └── productController.ts
+│       ├── middleware/
+│       │   └── authMiddleware.ts # Role authorization & optional token protection
+│       ├── models/
+│       │   ├── Product.ts      # Product schema (MRP, Wholesale, Sale price, Stock)
+│       │   └── User.ts         # User schema (Owner, Admin, Staff, Salesperson)
+│       ├── routes/
+│       │   ├── authRoutes.ts
+│       │   └── productRoutes.ts
+│       ├── scripts/
+│       │   ├── seed.ts         # Sample data seeder (Philips, Legrand, etc.)
+│       │   ├── seed1000.ts     # 1,000 item stress-test catalog seeder
+│       │   ├── generateSampleExcel.ts
+│       │   ├── importExcel.ts  # Bulk Excel catalog importer
+│       │   └── test-api.js     # API integration verification test runner
+│       └── types/
+│           └── index.ts        # Shared TypeScript interfaces
 └── frontend/
+    ├── app.json                # Expo application configuration
+    ├── vercel.json             # Vercel SPA routing & static export settings
+    ├── .env.example            # Frontend environment variable template
+    ├── package.json            # Scripts & frontend dependencies
+    ├── tsconfig.json           # Frontend TypeScript configuration
     ├── app/
+    │   ├── _layout.tsx         # Root layout with dynamic theme provider
+    │   ├── index.tsx           # Home catalog search, infographics & quick actions
     │   ├── (admin)/
-    │   │   └── dashboard.tsx   # Owner statistics & management screen
-    │   ├── (auth)/
-    │   │   └── login.tsx       # Secure owner login screen
-    │   ├── _layout.tsx         # Stack routing navigation configuration
-    │   ├── index.tsx           # Search lookup home screen
-    │   └── scanner.tsx         # Camera barcode scanner screen
-    ├── assets/                 # App icons, splash screens
-    ├── src/
-    │   ├── components/
-    │   │   ├── AddEditProductModal.tsx # Slide-up management drawer
-    │   │   └── ProductCard.tsx         # Stylized dark-theme item cards
-    │   ├── services/
-    │   │   └── api.ts          # Automatic backend URL parser
-    │   ├── store/
-    │   │   ├── useAuthStore.ts    # Secure session management
-    │   │   └── useProductStore.ts # Local caching, sorting & filtering
-    │   └── theme/
-    │       └── colors.ts       # Color system tokens
-    ├── app.json
-    ├── package.json
-    └── tsconfig.json
+    │   │   └── dashboard.tsx   # Management dashboard & store branding
+    │   └── (auth)/
+    │       ├── login.tsx       # Owner / Admin login
+    │       └── staff-login.tsx # Staff / Salesperson login
+    └── src/
+        ├── components/
+        │   ├── AddEditProductModal.tsx   # Comprehensive product drawer
+        │   ├── BrandStockInfographic.tsx # Brand stock charts & filter pills
+        │   ├── LogoUploadModal.tsx       # Store branding & logo upload
+        │   ├── ProductCard.tsx           # Multi-price item card with quote actions
+        │   ├── ProductDetailSheet.tsx    # Detailed item bottom sheet
+        │   ├── QuickPriceModal.tsx       # Fast 3-tier price update modal
+        │   ├── QuotationMakerModal.tsx   # Quotation builder & WhatsApp exporter
+        │   └── StockUpdateModal.tsx      # Quick +/- counter stock release modal
+        ├── services/
+        │   └── api.ts                    # Dynamic backend API client
+        ├── store/
+        │   ├── useAuthStore.ts           # Authentication & token store
+        │   ├── useBrandingStore.ts       # Store name, logo & GSTIN store
+        │   ├── useProductStore.ts        # Inventory, quotation & brand stats store
+        │   └── useThemeStore.ts          # Dark / Light theme preference store
+        └── theme/
+            └── colors.ts                 # Dark & Light design system tokens
 ```
 
 ---
 
-## 🗄️ Database Schemas & Roles
+## 🔑 Default Seed Credentials
 
-### 1. User Schema
-```typescript
-User {
-  _id: ObjectId
-  name: string
-  email: string
-  password: string // select: false (hidden by default)
-  role: "owner"
-  createdAt: Date
-  updatedAt: Date
-}
-```
+After running `npm run seed` in the backend:
 
-### 2. Product Schema
-```typescript
-Product {
-  _id: ObjectId
-  productName: string
-  productCode: string     // unique, indexed
-  barcode?: string        // unique, sparse indexed
-  category: string        // indexed
-  brand: string           // indexed
-  price: number
-  createdAt: Date
-  updatedAt: Date
-}
-```
-
-### Roles
-- **Employee:** Doesn't require login. Can query, sync, and scan barcodes. Cannot access admin routes, edit prices, or modify products.
-- **Owner:** Full admin capabilities. Authenticates via JWT. Can add/edit/delete products and update prices.
-
----
-
-## ⚡ Caching & Low-End Device Optimization
-
-To ensure smooth performance on low-end Android devices with **10,000+ items**:
-1. **In-Memory Filtering:** Instead of querying the database on every keystroke (which creates network latency and server overhead), the app performs a full catalog sync on startup (or when requested) and caches the products in local `AsyncStorage`. All text and barcode searches are run in-memory against this array using optimized Javascript filters, providing **instant 0ms response times** even when offline.
-2. **Virtualized Lists:** The main search screen utilizes React Native's `FlatList` configured with performance optimization props (`getItemLayout`, `maxToRenderPerBatch`, `windowSize`, `removeClippedSubviews`, etc.) to prevent high RAM consumption and frame-rate drops when scrolling through massive catalogs.
-
----
-
-## 🌐 Backend REST APIs
-
-| Method | Endpoint | Access | Description |
+| Role | Email | Password | Permissions |
 | :--- | :--- | :--- | :--- |
-| `POST` | `/auth/login` | Public | Logs in owner, returns details & JWT |
-| `GET` | `/products` | Public | Fetches all products (for local app sync) |
-| `GET` | `/products/search?q=...` | Public | Searches products on server |
-| `POST` | `/products` | Private (Owner) | Creates a new product |
-| `PUT` | `/products/:id` | Private (Owner) | Updates product details/price |
-| `DELETE` | `/products/:id` | Private (Owner) | Deletes a product |
+| **Owner / Admin** | `owner@smartprice.com` | `Password123` | Full access: View & edit MRP, Wholesale, and Sale price; Add/Delete products; Adjust stock. |
+| **Staff / Salesperson** | `sales@smartprice.com` | `Password123` | View Sale Price only (Wholesale Price is masked); Adjust stock (+/- counter sales); Create quotations. |
 
 ---
 
-## ⚙️ Environment Variables
+## 💻 Local Development Setup
 
-### Backend (`backend/.env`)
-Create a `.env` file inside the `backend` folder:
-```env
-PORT=5000
-MONGO_URI=mongodb+srv://<username>:<password>@cluster.mongodb.net/smartprice?retryWrites=true&w=majority
-JWT_SECRET=supersecretjwtkey123!@#
-JWT_EXPIRE=30d
+### 1. Prerequisites
+- **Node.js**: v18 or later
+- **MongoDB**: Local MongoDB instance or free [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) cluster.
+
+### 2. Backend Setup
+```bash
+cd backend
+cp .env.example .env
+# Edit .env with your MongoDB connection string & JWT Secret
+npm install
+npm run build
+npm run seed      # Seeds default users and sample electrical products
+npm run dev       # Starts server on http://localhost:5000
 ```
-*(If no `MONGO_URI` is supplied or the server fails to connect, the backend automatically falls back to a local file-based database `db.json` so you can test immediately.)*
 
-### Frontend (`frontend/.env`)
-By default, the frontend automatically extracts the development computer's IP address from Expo's dev server (`Constants.expoConfig.hostUri`). However, you can hardcode a URL for production:
-```env
-EXPO_PUBLIC_API_URL=https://your-backend-api-production.com
+### 3. Frontend Setup
+```bash
+cd frontend
+cp .env.example .env
+# Set EXPO_PUBLIC_API_URL=http://localhost:5000 (or your computer LAN IP for physical phones)
+npm install
+npm run web       # Launch web app in browser
+# OR
+npm run android   # Launch on Android emulator / device
 ```
 
 ---
 
-## 📦 APK / AAB Build Instructions
+## 🐳 1-Command Docker Deployment
 
-You can build the Android APK/AAB package using Expo EAS Build (recommended for ease of use) or locally via Gradle.
+You can spin up MongoDB and the SmartPrice Backend with one command:
 
-### Method A: Expo EAS Build (Cloud - Recommended)
+```bash
+docker compose up -d --build
+```
 
-1. **Install EAS CLI globally:**
+- **Backend API**: `http://localhost:5000`
+- **Health Check**: `http://localhost:5000/health`
+- **MongoDB**: `localhost:27017`
+
+---
+
+## ☁️ Cloud Hosting & Deployment Guide
+
+### Option 1: Backend on Render.com (Recommended & Free Tier Available)
+1. Push this repository to GitHub.
+2. Log into [Render.com](https://render.com) and click **New > Blueprint**.
+3. Select your repository. Render will automatically detect [`render.yaml`](file:///e:/smartprice/render.yaml).
+4. Supply your `MONGO_URI` (from MongoDB Atlas) in the environment settings.
+5. Click **Apply**. Render will build and deploy the backend. Your API URL will be:
+   `https://smartprice-backend-xxxx.onrender.com`
+6. Verify deployment by visiting `https://your-backend-url.onrender.com/health`.
+
+### Option 2: Backend on Railway / Fly.io / VPS
+- **Railway**: Simply link your repo; Railway detects [`backend/Dockerfile`](file:///e:/smartprice/backend/Dockerfile) and provisions the service automatically.
+- **VPS (Ubuntu/Debian)**: Clone repo, configure `.env`, and run `docker compose up -d`.
+
+---
+
+### Frontend Web Hosting (Vercel, Netlify, Render Static)
+
+The frontend is configured with [`frontend/vercel.json`](file:///e:/smartprice/frontend/vercel.json) for instantaneous deployment.
+
+#### Deploy on Vercel:
+1. Log into [Vercel](https://vercel.com) and click **Add New Project**.
+2. Select your repository.
+3. Configure the Project:
+   - **Root Directory**: Select `frontend`
+   - **Build Command**: `npx expo export -p web` (or `npm run build`)
+   - **Output Directory**: `dist`
+4. In **Environment Variables**, add:
+   ```env
+   EXPO_PUBLIC_API_URL=https://your-backend-url.onrender.com
+   ```
+5. Click **Deploy**. Your web app is live with full routing support!
+
+---
+
+## 📱 Mobile APK / Production App Build (Expo EAS)
+
+To build a standalone Android `.apk` file for your team:
+
+1. **Install EAS CLI**:
    ```bash
    npm install -g eas-cli
    ```
-2. **Log in to your Expo account:**
+2. **Log into Expo**:
    ```bash
    eas login
    ```
-3. **Configure EAS Build in the project:**
-   Run this from the `frontend/` folder:
+3. **Build Android APK**:
    ```bash
-   eas build:configure
-   ```
-   Select `Android` when prompted. This will generate an `eas.json` file.
-4. **Configure `eas.json` for APK generation:**
-   Add a `preview` or `local` profile to generate a direct `.apk` file instead of an `.aab` (App Bundle) file:
-   ```json
-   {
-     "build": {
-       "development": {
-         "developmentClient": true,
-         "distribution": "internal"
-       },
-       "preview": {
-         "android": {
-           "buildType": "apk"
-         }
-       },
-       "production": {}
-     }
-   }
-   ```
-5. **Run the APK build command:**
-   ```bash
+   cd frontend
    eas build --platform android --profile preview
    ```
-   *EAS will compile your app in the cloud and output a URL to download the completed `.apk` file directly to your testing device.*
+4. EAS builds the APK in the cloud and provides a direct download link. Install on any Android device without Google Play Store restrictions.
 
 ---
 
-### Method B: Local Android Gradle Build
+## 📡 REST API Reference
 
-If you want to build the APK completely locally on your machine without Expo cloud services, you must eject the project to generate native Android folders:
+### Public Endpoints
+- `GET /` — Service status
+- `GET /health` — Health check & uptime
+- `POST /auth/login` — Authenticate user (Owner, Admin, or Salesperson)
 
-1. **Pre-build/Eject Expo:**
-   Inside the `frontend/` folder, run:
-   ```bash
-   npx expo prebuild
-   ```
-   This generates the native `android` directory containing the Gradle wrappers and source code.
-2. **Compile using Gradle:**
-   Make sure you have Android SDK, JDK, and `ANDROID_HOME` environment variables configured, then run:
-   ```bash
-   cd android
-   ./gradlew assembleRelease
-   ```
-3. **Retrieve the APK:**
-   The output APK will be saved at:
-   `frontend/android/app/build/outputs/apk/release/app-release.apk`
+### Products Endpoints
+- `GET /products` — Fetch catalog (Wholesale price masked if accessed by staff)
+- `GET /products/search?q=...` — Search catalog by product name, category, code, or brand
+- `GET /products/:id` — Get product details
+- `POST /products` — Create product *(Owner / Admin only)*
+- `PUT /products/:id` — Update complete product *(Owner / Admin only)*
+- `PATCH /products/:id/quick-price` — Fast price update for MRP, Wholesale, Sale price *(Owner / Admin only)*
+- `PATCH /products/:id/stock` — Add or release stock quantity *(Owner, Admin, and Salesperson)*
+- `DELETE /products/:id` — Delete product *(Owner / Admin only)*
+- `POST /products/bulk` — Bulk import products array *(Owner / Admin only)*
+- `POST /products/upload-image` — Upload product image multipart form *(Owner / Admin only)*
 
 ---
 
-## 🚀 Production Deployment Guide
+## 🛡️ Cleanliness & Production Verification Checklist
 
-### 1. Deploy the Backend
-Deploy the Node.js Express server to a hosting provider such as **Render**, **Railway**, or **Heroku**:
-1. Connect your GitHub repository.
-2. Set the build command: `cd backend && npm install && npm run build`
-3. Set the start command: `cd backend && npm start`
-4. Define the Environment Variables (`PORT`, `MONGO_URI`, `JWT_SECRET`) in the hosting panel.
-
-### 2. Set Up MongoDB Atlas
-1. Register for a free MongoDB Atlas cluster.
-2. Add your server's IP address to the Network Access Allowlist.
-3. Obtain the connection string and set it as `MONGO_URI` in the backend hosting panel.
-4. Seed the database by running `npm run seed` pointing to the Atlas connection string.
-
-### 3. Build & Deploy Frontend
-1. Change the API URL: Set `EXPO_PUBLIC_API_URL` to your production backend URL.
-2. Generate the AAB (Android App Bundle) file for Google Play Store upload:
-   ```bash
-   eas build --platform android --profile production
-   ```
-3. Upload the resulting `.aab` file to the Google Play Console under **Production / Releases**.
+- [x] Unused barcode and camera libraries removed from UI and configuration.
+- [x] Comprehensive root `.gitignore` preventing secrets, caches, and build outputs from being tracked.
+- [x] Backend TypeScript compilation: 0 errors (`npm run build`).
+- [x] Frontend TypeScript validation: 0 errors (`npx tsc --noEmit`).
+- [x] Web production export verified: 0 errors (`npx expo export -p web`).
+- [x] `.env.example` templates created for both backend and frontend.
+- [x] Multi-stage `Dockerfile` and `docker-compose.yml` included.
+- [x] `render.yaml` and `vercel.json` configurations tested and ready.

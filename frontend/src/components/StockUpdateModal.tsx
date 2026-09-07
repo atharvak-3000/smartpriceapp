@@ -8,17 +8,21 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
-import { Colors } from '../theme/colors';
+import { useColors } from '../theme/colors';
 import { Product, useProductStore } from '../store/useProductStore';
 import { useAuthStore } from '../store/useAuthStore';
-import { getApiUrl } from '../services/api';
-import { Minus, Plus, X, TrendingUp } from 'lucide-react-native';
+import { Minus, Plus, X, ShoppingCart, ArrowDownRight, ArrowUpRight, CheckCircle2 } from 'lucide-react-native';
 
 const MinusIcon = Minus as any;
 const PlusIcon = Plus as any;
 const XIcon = X as any;
-const TrendingUpIcon = TrendingUp as any;
+const ShoppingCartIcon = ShoppingCart as any;
+const ArrowDownRightIcon = ArrowDownRight as any;
+const ArrowUpRightIcon = ArrowUpRight as any;
+const CheckCircle2Icon = CheckCircle2 as any;
 
 interface StockUpdateModalProps {
   visible: boolean;
@@ -27,19 +31,18 @@ interface StockUpdateModalProps {
 }
 
 export const StockUpdateModal: React.FC<StockUpdateModalProps> = ({ visible, product, onClose }) => {
+  const colors = useColors();
   const token = useAuthStore((state) => state.token);
-  const updateStockStore = useProductStore((state) => state.updateStock);
+  const adjustStock = useProductStore((state) => state.adjustStock);
 
-  const [absoluteStock, setAbsoluteStock] = useState('');
-  const [delta, setDelta] = useState(1);
-  const [isLoading, setIsLoading] = useState(false);
-  const [mode, setMode] = useState<'quick' | 'absolute'>('quick');
+  const [activeTab, setActiveTab] = useState<'release' | 'add' | 'set'>('release');
+  const [quantityInput, setQuantityInput] = useState('1');
+  const [isUpdating, setIsUpdating] = useState(false);
 
   useEffect(() => {
     if (visible && product) {
-      setAbsoluteStock(product.stock.toString());
-      setDelta(1);
-      setMode('quick');
+      setQuantityInput('1');
+      setActiveTab('release');
     }
   }, [visible, product]);
 
@@ -47,164 +50,312 @@ export const StockUpdateModal: React.FC<StockUpdateModalProps> = ({ visible, pro
 
   const currentStock = product.stock ?? 0;
 
-  const sendStockUpdate = async (payload: { delta?: number; absolute?: number }) => {
-    setIsLoading(true);
+  const handleStockAction = async (delta?: number, absolute?: number) => {
+    setIsUpdating(true);
     try {
-      const API_URL = getApiUrl();
-      const response = await fetch(`${API_URL}/products/${product._id}/stock`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
+      const res = await adjustStock(
+        product._id,
+        { delta, absolute },
+        token
+      );
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.message || 'Failed to update stock');
+      if (res.success) {
+        onClose();
+      } else {
+        Alert.alert('Error', res.message || 'Failed to update stock');
       }
-
-      updateStockStore(product._id, result.data.stock);
-      onClose();
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to update stock');
+      Alert.alert('Error', e.message || 'Something went wrong');
     } finally {
-      setIsLoading(false);
+      setIsUpdating(false);
     }
   };
 
-  const handleQuickIncrement = () => sendStockUpdate({ delta: delta });
-  const handleQuickDecrement = () => {
-    if (currentStock - delta < 0) {
-      Alert.alert('Invalid', 'Stock cannot go below 0');
+  const handleQuickRelease = (qty: number) => {
+    if (currentStock < qty) {
+      Alert.alert('Low Stock', `Only ${currentStock} pieces available in stock.`);
       return;
     }
-    sendStockUpdate({ delta: -delta });
+    handleStockAction(-qty, undefined);
   };
 
-  const handleAbsoluteSet = () => {
-    const value = parseInt(absoluteStock, 10);
-    if (isNaN(value) || value < 0) {
-      Alert.alert('Invalid', 'Please enter a valid stock quantity');
+  const handleQuickAdd = (qty: number) => {
+    handleStockAction(qty, undefined);
+  };
+
+  const handleCustomSubmit = () => {
+    const qty = parseInt(quantityInput, 10);
+    if (isNaN(qty) || qty <= 0) {
+      Alert.alert('Invalid Quantity', 'Please enter a valid quantity greater than 0.');
       return;
     }
-    sendStockUpdate({ absolute: value });
+
+    if (activeTab === 'release') {
+      if (currentStock < qty) {
+        Alert.alert('Insufficient Stock', `Cannot release ${qty} pieces. Only ${currentStock} available.`);
+        return;
+      }
+      handleStockAction(-qty, undefined);
+    } else if (activeTab === 'add') {
+      handleStockAction(qty, undefined);
+    } else {
+      handleStockAction(undefined, qty);
+    }
   };
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <View style={styles.card}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.overlay}
+      >
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.headerLeft}>
-              <TrendingUpIcon size={18} color={Colors.accent} />
-              <Text style={styles.title}>Update Stock</Text>
+          <View style={[styles.header, { borderBottomColor: colors.border }]}>
+            <View style={styles.headerInfo}>
+              <View style={[styles.headerIconBadge, { backgroundColor: colors.accentLight }]}>
+                <ShoppingCartIcon size={18} color={colors.accent} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.title, { color: colors.text }]}>Manage Stock</Text>
+                <Text numberOfLines={1} style={[styles.subtitle, { color: colors.textSecondary }]}>
+                  {product.productName}
+                </Text>
+              </View>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <XIcon size={18} color={Colors.textSecondary} />
+              <XIcon size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.productName} numberOfLines={1}>{product.productName}</Text>
-          <Text style={styles.currentStock}>Current Stock: <Text style={styles.currentStockValue}>{currentStock}</Text></Text>
+          {/* Current Stock Banner */}
+          <View style={[styles.stockBanner, { backgroundColor: colors.inputBackground }]}>
+            <Text style={[styles.stockBannerLabel, { color: colors.textSecondary }]}>
+              Total Available Quantity:
+            </Text>
+            <View style={styles.stockBannerValueRow}>
+              <Text style={[styles.stockBannerValue, { color: colors.text }]}>{currentStock}</Text>
+              <Text style={[styles.stockBannerUnit, { color: colors.textSecondary }]}>Pieces</Text>
+            </View>
+            <Text style={[styles.brandBadge, { color: colors.accent }]}>
+              Brand: {product.brand}
+            </Text>
+          </View>
 
-          {/* Mode Toggle */}
-          <View style={styles.modeToggle}>
+          {/* Mode Tabs */}
+          <View style={[styles.tabsRow, { backgroundColor: colors.inputBackground }]}>
             <TouchableOpacity
-              onPress={() => setMode('quick')}
-              style={[styles.modeBtn, mode === 'quick' && styles.modeBtnActive]}
+              onPress={() => {
+                setActiveTab('release');
+                setQuantityInput('1');
+              }}
+              style={[
+                styles.tabBtn,
+                activeTab === 'release' && [styles.activeTabBtn, { backgroundColor: colors.card }],
+              ]}
             >
-              <Text style={[styles.modeBtnText, mode === 'quick' && styles.modeBtnTextActive]}>Quick +/-</Text>
+              <ArrowDownRightIcon
+                size={14}
+                color={activeTab === 'release' ? colors.error : colors.textSecondary}
+              />
+              <Text
+                style={[
+                  styles.tabBtnText,
+                  { color: activeTab === 'release' ? colors.text : colors.textSecondary },
+                ]}
+              >
+                Release (Sale)
+              </Text>
             </TouchableOpacity>
+
             <TouchableOpacity
-              onPress={() => setMode('absolute')}
-              style={[styles.modeBtn, mode === 'absolute' && styles.modeBtnActive]}
+              onPress={() => {
+                setActiveTab('add');
+                setQuantityInput('5');
+              }}
+              style={[
+                styles.tabBtn,
+                activeTab === 'add' && [styles.activeTabBtn, { backgroundColor: colors.card }],
+              ]}
             >
-              <Text style={[styles.modeBtnText, mode === 'absolute' && styles.modeBtnTextActive]}>Set Exact</Text>
+              <ArrowUpRightIcon
+                size={14}
+                color={activeTab === 'add' ? colors.success : colors.textSecondary}
+              />
+              <Text
+                style={[
+                  styles.tabBtnText,
+                  { color: activeTab === 'add' ? colors.text : colors.textSecondary },
+                ]}
+              >
+                Add Stock
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => {
+                setActiveTab('set');
+                setQuantityInput(currentStock.toString());
+              }}
+              style={[
+                styles.tabBtn,
+                activeTab === 'set' && [styles.activeTabBtn, { backgroundColor: colors.card }],
+              ]}
+            >
+              <Text
+                style={[
+                  styles.tabBtnText,
+                  { color: activeTab === 'set' ? colors.text : colors.textSecondary },
+                ]}
+              >
+                Set Total
+              </Text>
             </TouchableOpacity>
           </View>
 
-          {mode === 'quick' ? (
-            <>
-              {/* Delta selector */}
-              <View style={styles.deltaRow}>
-                <Text style={styles.deltaLabel}>Amount:</Text>
-                {[1, 5, 10, 25, 50].map((n) => (
+          {/* Quick Action Chips for Instant Taps */}
+          {activeTab === 'release' && (
+            <View style={styles.chipsSection}>
+              <Text style={[styles.chipsLabel, { color: colors.textSecondary }]}>
+                Quick Release (1-Tap):
+              </Text>
+              <View style={styles.chipsRow}>
+                {[1, 2, 3, 5, 10].map((qty) => (
                   <TouchableOpacity
-                    key={n}
-                    onPress={() => setDelta(n)}
-                    style={[styles.deltaChip, delta === n && styles.deltaChipActive]}
+                    key={qty}
+                    onPress={() => handleQuickRelease(qty)}
+                    disabled={isUpdating}
+                    style={[
+                      styles.chipBtn,
+                      {
+                        backgroundColor: 'rgba(255, 69, 58, 0.12)',
+                        borderColor: colors.error,
+                      },
+                    ]}
                   >
-                    <Text style={[styles.deltaChipText, delta === n && styles.deltaChipTextActive]}>{n}</Text>
+                    <Text style={[styles.chipText, { color: colors.error }]}>-{qty} pcs</Text>
                   </TouchableOpacity>
                 ))}
               </View>
+            </View>
+          )}
 
-              <View style={styles.quickActions}>
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.decrementBtn]}
-                  onPress={handleQuickDecrement}
-                  disabled={isLoading}
-                >
-                  {isLoading ? (
-                    <ActivityIndicator size="small" color="#FFF" />
-                  ) : (
-                    <>
-                      <MinusIcon size={18} color="#FFF" />
-                      <Text style={styles.actionBtnText}>Remove {delta}</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
+          {activeTab === 'add' && (
+            <View style={styles.chipsSection}>
+              <Text style={[styles.chipsLabel, { color: colors.textSecondary }]}>
+                Quick Add (1-Tap):
+              </Text>
+              <View style={styles.chipsRow}>
+                {[1, 5, 10, 20, 50].map((qty) => (
+                  <TouchableOpacity
+                    key={qty}
+                    onPress={() => handleQuickAdd(qty)}
+                    disabled={isUpdating}
+                    style={[
+                      styles.chipBtn,
+                      {
+                        backgroundColor: 'rgba(48, 209, 88, 0.12)',
+                        borderColor: colors.success,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.chipText, { color: colors.success }]}>+{qty} pcs</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
 
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.incrementBtn]}
-                  onPress={handleQuickIncrement}
-                  disabled={isLoading}
-                >
-                  {isLoading ? (
-                    <ActivityIndicator size="small" color="#000" />
-                  ) : (
-                    <>
-                      <PlusIcon size={18} color="#000" />
-                      <Text style={[styles.actionBtnText, { color: '#000' }]}>Add {delta}</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </>
-          ) : (
-            <>
-              <View style={styles.absoluteRow}>
-                <Text style={styles.deltaLabel}>New Quantity:</Text>
-                <TextInput
-                  style={styles.absoluteInput}
-                  value={absoluteStock}
-                  onChangeText={setAbsoluteStock}
-                  keyboardType="numeric"
-                  placeholder="0"
-                  placeholderTextColor={Colors.textSecondary}
-                  selectTextOnFocus
-                />
-              </View>
+          {/* Direct Input & Stepper */}
+          <View style={styles.stepperContainer}>
+            <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>
+              {activeTab === 'release'
+                ? 'Quantity to Decrease / Release:'
+                : activeTab === 'add'
+                ? 'Quantity to Add / Restock:'
+                : 'Direct Total Stock Count:'}
+            </Text>
+
+            <View style={styles.stepperRow}>
+              <TouchableOpacity
+                onPress={() => {
+                  const val = parseInt(quantityInput, 10) || 0;
+                  if (val > 1) setQuantityInput((val - 1).toString());
+                }}
+                style={[styles.stepperBtn, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
+              >
+                <MinusIcon size={18} color={colors.text} />
+              </TouchableOpacity>
+
+              <TextInput
+                style={[
+                  styles.quantityInput,
+                  {
+                    backgroundColor: colors.inputBackground,
+                    borderColor: colors.border,
+                    color: colors.text,
+                  },
+                ]}
+                keyboardType="number-pad"
+                value={quantityInput}
+                onChangeText={setQuantityInput}
+                selectTextOnFocus
+              />
 
               <TouchableOpacity
-                style={styles.setBtn}
-                onPress={handleAbsoluteSet}
-                disabled={isLoading}
+                onPress={() => {
+                  const val = parseInt(quantityInput, 10) || 0;
+                  setQuantityInput((val + 1).toString());
+                }}
+                style={[styles.stepperBtn, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
               >
-                {isLoading ? (
-                  <ActivityIndicator size="small" color="#000" />
-                ) : (
-                  <Text style={styles.setBtnText}>Set Stock to {absoluteStock || 0}</Text>
-                )}
+                <PlusIcon size={18} color={colors.text} />
               </TouchableOpacity>
-            </>
-          )}
+            </View>
+          </View>
+
+          {/* Confirmation Button */}
+          <View style={[styles.footer, { borderTopColor: colors.border }]}>
+            <TouchableOpacity
+              onPress={onClose}
+              style={[styles.cancelBtn, { borderColor: colors.border }]}
+            >
+              <Text style={[styles.cancelBtnText, { color: colors.textSecondary }]}>Cancel</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={handleCustomSubmit}
+              disabled={isUpdating}
+              style={[
+                styles.confirmBtn,
+                {
+                  backgroundColor:
+                    activeTab === 'release'
+                      ? colors.error
+                      : activeTab === 'add'
+                      ? colors.success
+                      : colors.accent,
+                },
+              ]}
+            >
+              {isUpdating ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <CheckCircle2Icon size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.confirmBtnText}>
+                    {activeTab === 'release'
+                      ? `Release ${quantityInput || 1} Pcs`
+                      : activeTab === 'add'
+                      ? `Add ${quantityInput || 1} Pcs`
+                      : `Set to ${quantityInput || 0} Pcs`}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
@@ -212,163 +363,196 @@ export const StockUpdateModal: React.FC<StockUpdateModalProps> = ({ visible, pro
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.75)',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   card: {
     width: '100%',
-    backgroundColor: Colors.card,
+    maxWidth: 440,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 8,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    padding: 16,
+    borderBottomWidth: 1,
   },
-  headerLeft: {
+  headerInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    flex: 1,
+    marginRight: 10,
+  },
+  headerIconBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
   title: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
-    color: Colors.text,
+  },
+  subtitle: {
+    fontSize: 12,
+    marginTop: 2,
   },
   closeBtn: {
-    padding: 4,
+    padding: 6,
   },
-  productName: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    marginBottom: 4,
-  },
-  currentStock: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    marginBottom: 16,
-  },
-  currentStockValue: {
-    color: Colors.text,
-    fontWeight: '700',
-  },
-  modeToggle: {
-    flexDirection: 'row',
-    backgroundColor: Colors.background,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 3,
-    marginBottom: 20,
-  },
-  modeBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    borderRadius: 8,
+  stockBanner: {
+    padding: 14,
+    marginHorizontal: 16,
+    marginTop: 14,
+    borderRadius: 12,
     alignItems: 'center',
   },
-  modeBtnActive: {
-    backgroundColor: Colors.accent,
-  },
-  modeBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-  },
-  modeBtnTextActive: {
-    color: '#FFF',
-  },
-  deltaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 16,
-  },
-  deltaLabel: {
-    fontSize: 13,
-    color: Colors.textSecondary,
+  stockBannerLabel: {
+    fontSize: 12,
     fontWeight: '500',
   },
-  deltaChip: {
+  stockBannerValueRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginVertical: 4,
+  },
+  stockBannerValue: {
+    fontSize: 32,
+    fontWeight: '800',
+    marginRight: 6,
+  },
+  stockBannerUnit: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  brandBadge: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  tabsRow: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    marginTop: 14,
+    borderRadius: 10,
+    padding: 4,
+  },
+  tabBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 6,
+  },
+  activeTabBtn: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  tabBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  chipsSection: {
+    paddingHorizontal: 16,
+    marginTop: 14,
+  },
+  chipsLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  chipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chipBtn: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: Colors.background,
     borderWidth: 1,
-    borderColor: Colors.border,
   },
-  deltaChipActive: {
-    backgroundColor: Colors.accentLight,
-    borderColor: Colors.accent,
+  chipText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
-  deltaChipText: {
-    fontSize: 13,
+  stepperContainer: {
+    padding: 16,
+  },
+  inputLabel: {
+    fontSize: 12,
     fontWeight: '600',
-    color: Colors.textSecondary,
+    marginBottom: 8,
   },
-  deltaChipTextActive: {
-    color: Colors.accent,
-  },
-  quickActions: {
+  stepperRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 10,
   },
-  actionBtn: {
-    flex: 1,
-    height: 50,
+  stepperBtn: {
+    width: 46,
+    height: 46,
     borderRadius: 12,
-    flexDirection: 'row',
+    borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 6,
   },
-  decrementBtn: {
-    backgroundColor: Colors.error,
+  quantityInput: {
+    flex: 1,
+    height: 46,
+    borderWidth: 1,
+    borderRadius: 12,
+    textAlign: 'center',
+    fontSize: 20,
+    fontWeight: '800',
   },
-  incrementBtn: {
-    backgroundColor: Colors.text,
+  footer: {
+    flexDirection: 'row',
+    padding: 16,
+    borderTopWidth: 1,
+    gap: 10,
   },
-  actionBtnText: {
+  cancelBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cancelBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  confirmBtn: {
+    flex: 2,
+    height: 44,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  confirmBtnText: {
+    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '700',
-    color: '#FFF',
-  },
-  absoluteRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
-  },
-  absoluteInput: {
-    flex: 1,
-    height: 48,
-    backgroundColor: Colors.inputBackground,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    fontSize: 22,
-    fontWeight: '700',
-    color: Colors.text,
-    textAlign: 'center',
-  },
-  setBtn: {
-    height: 50,
-    backgroundColor: Colors.text,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  setBtnText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: Colors.background,
   },
 });

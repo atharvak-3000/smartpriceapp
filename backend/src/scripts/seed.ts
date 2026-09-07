@@ -72,13 +72,72 @@ const seedDB = async () => {
     console.log(`Email: owner@smartprice.com`);
     console.log(`Password: ${ownerPassword}`);
 
+    // Create Staff / Sales Person Account
+    const staff = new User({
+      name: 'Sales Person',
+      email: 'sales@smartprice.com',
+      password: 'Password123',
+      role: 'staff'
+    });
+    await staff.save();
+    console.log(`Created Sales Person account:`);
+    console.log(`Email: sales@smartprice.com`);
+    console.log(`Password: Password123`);
+
+    // Add user's exact sample items with 3 prices and stock
+    const sampleItems = [
+      {
+        productName: 'Philips LED Bulb 5W',
+        productCode: 'PL-LED5-CD',
+        barcode: '8901097312050',
+        category: 'LED & Lighting',
+        brand: 'Philips',
+        price: 100,
+        salePrice: 100,
+        mrpPrice: 140,
+        wholesalePrice: 80,
+        stock: 100,
+      },
+      {
+        productName: 'Philips LED Bulb 10W',
+        productCode: 'PL-LED10-CD',
+        barcode: '8901097312067',
+        category: 'LED & Lighting',
+        brand: 'Philips',
+        price: 500,
+        salePrice: 500,
+        mrpPrice: 650,
+        wholesalePrice: 420,
+        stock: 50,
+      },
+      {
+        productName: 'Legrand Switches',
+        productCode: 'LG-SW-10A',
+        barcode: '8901234005099',
+        category: 'Switches & Sockets',
+        brand: 'Legrand',
+        price: 366.67,
+        salePrice: 366.67,
+        mrpPrice: 450,
+        wholesalePrice: 290,
+        stock: 80,
+      },
+      ...mockProducts.map((p) => ({
+        ...p,
+        salePrice: p.price,
+        mrpPrice: Math.round(p.price * 1.25),
+        wholesalePrice: Math.round(p.price * 0.85),
+        stock: 50,
+      })),
+    ];
+
     // Clear Products
     await Product.deleteMany({});
     console.log('Cleared existing products.');
 
     // Seed Products
-    const createdProducts = await Product.insertMany(mockProducts);
-    console.log(`Successfully seeded ${createdProducts.length} mock products.`);
+    const createdProducts = await Product.insertMany(sampleItems);
+    console.log(`Successfully seeded ${createdProducts.length} mock products with 3 prices & stock.`);
 
     console.log('Seeding process completed!');
     process.exit(0);

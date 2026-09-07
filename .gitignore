@@ -1,21 +1,51 @@
 # Dependencies
 node_modules/
+.pnp
+.pnp.js
 
-# Environment Variables (CRITICAL to ignore)
+# Environment Variables (Never commit secrets!)
 .env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+!.env.example
+!backend/.env.example
+!frontend/.env.example
 
-# Build outputs
+# Build & Compilation Outputs
 dist/
 build/
+web-build/
 .expo/
+*.tsbuildinfo
 
-# OS files
-.DS_Store
-Thumbs.db
+# Uploads & Media (Ignore uploaded images, keep folder structure)
+backend/uploads/*
+!backend/uploads/products/
+!backend/uploads/products/.gitkeep
 
-# Logs
+# Package Manager Caches
+.npm
+.yarn/
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-logs/
-*.log
+pnpm-debug.log*
+
+# System & OS Files
+.DS_Store
+Thumbs.db
+desktop.ini
+*.tmp
+
+# Editor & IDE Directories
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

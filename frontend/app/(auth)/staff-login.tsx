@@ -13,10 +13,10 @@ import {
 } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { useRouter } from 'expo-router';
-import { Colors } from '../../src/theme/colors';
+import { useColors } from '../../src/theme/colors';
 import { useAuthStore } from '../../src/store/useAuthStore';
 import { getApiUrl } from '../../src/services/api';
-import { Mail, Lock, Eye, EyeOff, Users } from 'lucide-react-native';
+import { Mail, Lock, Eye, EyeOff, Users, CheckCircle2 } from 'lucide-react-native';
 
 interface LoginFormData {
   email: string;
@@ -25,6 +25,7 @@ interface LoginFormData {
 
 export default function StaffLoginScreen() {
   const router = useRouter();
+  const colors = useColors();
   const { login, isAuthenticated, user } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -37,7 +38,6 @@ export default function StaffLoginScreen() {
     defaultValues: { email: '', password: '' },
   });
 
-  // If already logged in, redirect appropriately
   useEffect(() => {
     if (isAuthenticated && user) {
       if (user.role === 'owner') {
@@ -94,24 +94,25 @@ export default function StaffLoginScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
+      style={[styles.container, { backgroundColor: colors.background }]}
     >
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         {/* Header */}
         <View style={styles.headerSection}>
-          <View style={styles.logoBadge}>
-            <Users size={38} color={Colors.price} />
+          <View style={[styles.logoBadge, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Users size={38} color={colors.price} />
           </View>
-          <Text style={styles.title}>Staff Login</Text>
-          <Text style={styles.subtitle}>
-            Log in to browse the product catalog, check prices, and view stock levels.
+          <Text style={[styles.title, { color: colors.text }]}>Sales Staff Login</Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+            Log in to view customer sale prices, create quotations, and manage counter stock.
           </Text>
         </View>
 
-        {/* Info Pill */}
-        <View style={styles.infoPill}>
-          <Text style={styles.infoPillText}>
-            👀 Staff accounts have view-only access — no editing
+        {/* Feature Capabilities Pill */}
+        <View style={[styles.infoPill, { backgroundColor: colors.accentLight }]}>
+          <CheckCircle2 size={16} color={colors.accent} style={{ marginRight: 6 }} />
+          <Text style={[styles.infoPillText, { color: colors.accent }]}>
+            Active Sales Access: Quotation Maker & Stock Release
           </Text>
         </View>
 
@@ -119,9 +120,15 @@ export default function StaffLoginScreen() {
         <View style={styles.formSection}>
           {/* Email */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Email Address</Text>
-            <View style={[styles.inputWrapper, errors.email && styles.inputWrapperError]}>
-              <Mail size={18} color={Colors.textSecondary} style={styles.inputIcon} />
+            <Text style={[styles.label, { color: colors.textSecondary }]}>Email Address</Text>
+            <View
+              style={[
+                styles.inputWrapper,
+                { backgroundColor: colors.inputBackground, borderColor: colors.border },
+                errors.email && { borderColor: colors.error },
+              ]}
+            >
+              <Mail size={18} color={colors.textSecondary} style={styles.inputIcon} />
               <Controller
                 control={control}
                 rules={{
@@ -134,12 +141,12 @@ export default function StaffLoginScreen() {
                 name="email"
                 render={({ field: { onChange, onBlur, value } }) => (
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, { color: colors.text }]}
                     onBlur={onBlur}
                     onChangeText={onChange}
                     value={value}
-                    placeholder="staff@company.com"
-                    placeholderTextColor={Colors.textSecondary}
+                    placeholder="sales@smartprice.com"
+                    placeholderTextColor={colors.textSecondary}
                     keyboardType="email-address"
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -147,71 +154,84 @@ export default function StaffLoginScreen() {
                 )}
               />
             </View>
-            {errors.email && <Text style={styles.errorText}>{errors.email.message}</Text>}
+            {errors.email && <Text style={[styles.errorText, { color: colors.error }]}>{errors.email.message}</Text>}
           </View>
 
           {/* Password */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Password</Text>
-            <View style={[styles.inputWrapper, errors.password && styles.inputWrapperError]}>
-              <Lock size={18} color={Colors.textSecondary} style={styles.inputIcon} />
+            <Text style={[styles.label, { color: colors.textSecondary }]}>Password</Text>
+            <View
+              style={[
+                styles.inputWrapper,
+                { backgroundColor: colors.inputBackground, borderColor: colors.border },
+                errors.password && { borderColor: colors.error },
+              ]}
+            >
+              <Lock size={18} color={colors.textSecondary} style={styles.inputIcon} />
               <Controller
                 control={control}
-                rules={{ required: 'Password is required' }}
+                rules={{
+                  required: 'Password is required',
+                  minLength: {
+                    value: 6,
+                    message: 'Password must be at least 6 characters',
+                  },
+                }}
                 name="password"
                 render={({ field: { onChange, onBlur, value } }) => (
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, { color: colors.text }]}
                     onBlur={onBlur}
                     onChangeText={onChange}
                     value={value}
-                    placeholder="Password"
-                    placeholderTextColor={Colors.textSecondary}
+                    placeholder="Enter staff password"
+                    placeholderTextColor={colors.textSecondary}
                     secureTextEntry={!showPassword}
                     autoCapitalize="none"
-                    autoCorrect={false}
                   />
                 )}
               />
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
+              <TouchableOpacity
+                onPress={() => setShowPassword(!showPassword)}
+                style={styles.eyeBtn}
+              >
                 {showPassword ? (
-                  <EyeOff size={18} color={Colors.textSecondary} />
+                  <EyeOff size={18} color={colors.textSecondary} />
                 ) : (
-                  <Eye size={18} color={Colors.textSecondary} />
+                  <Eye size={18} color={colors.textSecondary} />
                 )}
               </TouchableOpacity>
             </View>
-            {errors.password && <Text style={styles.errorText}>{errors.password.message}</Text>}
+            {errors.password && <Text style={[styles.errorText, { color: colors.error }]}>{errors.password.message}</Text>}
           </View>
 
           {/* Submit */}
           <TouchableOpacity
             disabled={loading}
             onPress={handleSubmit(onSubmit)}
-            style={styles.submitBtn}
+            style={[styles.submitBtn, { backgroundColor: colors.price }]}
           >
             {loading ? (
-              <ActivityIndicator size="small" color={Colors.background} />
+              <ActivityIndicator size="small" color="#FFF" />
             ) : (
-              <Text style={styles.submitBtnText}>Sign In as Staff</Text>
+              <Text style={styles.submitBtnText}>Sign In as Sales Person</Text>
             )}
           </TouchableOpacity>
 
-          {/* Divider */}
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          {/* Owner Login Link */}
-          <TouchableOpacity onPress={() => router.replace('/(auth)/login')} style={styles.ownerLink}>
-            <Text style={styles.ownerLinkText}>Sign in as Owner (Admin)</Text>
+          {/* Owner login link */}
+          <TouchableOpacity
+            onPress={() => router.push('/(auth)/login')}
+            style={styles.ownerLinkBtn}
+          >
+            <Text style={[styles.ownerLinkText, { color: colors.textSecondary }]}>
+              Store Owner?{' '}
+              <Text style={{ color: colors.accent, fontWeight: '700' }}>Admin Login</Text>
+            </Text>
           </TouchableOpacity>
 
-          {/* Back */}
+          {/* Cancel */}
           <TouchableOpacity onPress={() => router.back()} style={styles.cancelBtn}>
-            <Text style={styles.cancelBtnText}>Back to lookup</Text>
+            <Text style={[styles.cancelBtnText, { color: colors.textSecondary }]}>Cancel & Return to Search</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -222,7 +242,6 @@ export default function StaffLoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
   },
   scrollContent: {
     flexGrow: 1,
@@ -234,68 +253,56 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   logoBadge: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
-    backgroundColor: 'rgba(48,209,88,0.1)',
+    width: 76,
+    height: 76,
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: 'rgba(48,209,88,0.25)',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
   },
   title: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: Colors.text,
-    marginBottom: 8,
+    fontWeight: '800',
+    marginBottom: 6,
   },
   subtitle: {
-    fontSize: 14,
-    color: Colors.textSecondary,
+    fontSize: 13,
     textAlign: 'center',
-    lineHeight: 20,
-    paddingHorizontal: 16,
+    lineHeight: 18,
+    paddingHorizontal: 12,
   },
   infoPill: {
-    backgroundColor: 'rgba(10,132,255,0.08)',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(10,132,255,0.2)',
-    padding: 12,
-    marginBottom: 28,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    marginBottom: 24,
   },
   infoPillText: {
-    fontSize: 13,
-    color: Colors.accent,
-    fontWeight: '500',
-    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '600',
   },
   formSection: {
     width: '100%',
   },
   inputGroup: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   label: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.textSecondary,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.inputBackground,
     borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 8,
+    borderRadius: 12,
     paddingHorizontal: 12,
     height: 48,
-  },
-  inputWrapperError: {
-    borderColor: Colors.error,
   },
   inputIcon: {
     marginRight: 10,
@@ -303,65 +310,45 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 15,
-    color: Colors.text,
     height: '100%',
   },
   eyeBtn: {
     padding: 8,
   },
   errorText: {
-    color: Colors.error,
     fontSize: 12,
     marginTop: 4,
   },
   submitBtn: {
     height: 48,
-    backgroundColor: Colors.price,
-    borderRadius: 8,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
+    marginTop: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
   },
   submitBtnText: {
-    color: '#000',
+    color: '#FFFFFF',
     fontSize: 15,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
-  divider: {
-    flexDirection: 'row',
+  ownerLinkBtn: {
+    marginTop: 18,
     alignItems: 'center',
-    marginBottom: 16,
-    gap: 10,
-  },
-  dividerLine: {
-    flex: 1,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: Colors.border,
-  },
-  dividerText: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-  },
-  ownerLink: {
-    height: 44,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
   },
   ownerLinkText: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    fontWeight: '500',
+    fontSize: 13,
   },
   cancelBtn: {
+    marginTop: 14,
     alignItems: 'center',
     paddingVertical: 10,
   },
   cancelBtnText: {
-    color: Colors.textSecondary,
-    fontSize: 14,
+    fontSize: 13,
   },
 });
