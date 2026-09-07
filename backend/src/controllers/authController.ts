@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
-import User from '../models/User';
+import UserModel from '../models/User';
 import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
 
 // Helper to sign JWT
 const getSignedJwtToken = (id: string): string => {
@@ -23,11 +22,11 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    let user = await User.findOne({ email }).select('+password');
+    const user = await UserModel.findByEmail(email.trim().toLowerCase());
     let isMatch = false;
 
     if (user) {
-      isMatch = await user.matchPassword(password);
+      isMatch = await UserModel.matchPassword(password, user.password);
     }
 
     if (!user || !isMatch) {
@@ -36,13 +35,14 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     }
 
     // Create token
-    const token = getSignedJwtToken(user._id.toString());
+    const token = getSignedJwtToken(String(user.id));
 
     res.status(200).json({
       success: true,
       token,
       user: {
-        id: user._id,
+        id: String(user.id),
+        _id: String(user.id),
         name: user.name,
         email: user.email,
         role: user.role,

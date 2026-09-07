@@ -1,7 +1,6 @@
-import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import User from '../models/User';
-import Product from '../models/Product';
+import bcrypt from 'bcryptjs';
+import getPool from '../config/db';
 
 dotenv.config();
 
@@ -52,97 +51,85 @@ const mockProducts = [
 
 const seedDB = async () => {
   try {
-    await mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/smartprice');
-    console.log('Connected to MongoDB for seeding...');
+    const pool = getPool();
+    console.log('Connecting to MySQL for seeding...');
+
+    // Create tables if not exist
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NOT NULL UNIQUE,
+        password VARCHAR(255) NOT NULL,
+        role ENUM('owner', 'admin', 'staff', 'salesperson') NOT NULL DEFAULT 'staff',
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS products (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        productName VARCHAR(255) NOT NULL,
+        productCode VARCHAR(100) NOT NULL UNIQUE,
+        barcode VARCHAR(100) UNIQUE DEFAULT NULL,
+        category VARCHAR(100) NOT NULL,
+        brand VARCHAR(100) NOT NULL,
+        description TEXT DEFAULT NULL,
+        price DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+        salePrice DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+        mrpPrice DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+        wholesalePrice DECIMAL(10, 2) DEFAULT NULL,
+        stock INT NOT NULL DEFAULT 0,
+        imageUrl VARCHAR(500) DEFAULT NULL,
+        status ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_brand (brand),
+        INDEX idx_category (category),
+        INDEX idx_status (status)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
 
     // Clear Users
-    await User.deleteMany({});
+    await pool.query('DELETE FROM users');
     console.log('Cleared existing users.');
 
-    // Create Owner
-    const ownerPassword = 'Password123';
-    const owner = new User({
-      name: 'Store Owner',
-      email: 'owner@smartprice.com',
-      password: ownerPassword,
-      role: 'owner'
-    });
-    await owner.save();
-    console.log(`Created Owner account:`);
-    console.log(`Email: owner@smartprice.com`);
-    console.log(`Password: ${ownerPassword}`);
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash('Password123', salt);
 
-    // Create Staff / Sales Person Account
-    const staff = new User({
-      name: 'Sales Person',
-      email: 'sales@smartprice.com',
-      password: 'Password123',
-      role: 'staff'
-    });
-    await staff.save();
-    console.log(`Created Sales Person account:`);
-    console.log(`Email: sales@smartprice.com`);
-    console.log(`Password: Password123`);
-
-    // Add user's exact sample items with 3 prices and stock
-    const sampleItems = [
-      {
-        productName: 'Philips LED Bulb 5W',
-        productCode: 'PL-LED5-CD',
-        barcode: '8901097312050',
-        category: 'LED & Lighting',
-        brand: 'Philips',
-        price: 100,
-        salePrice: 100,
-        mrpPrice: 140,
-        wholesalePrice: 80,
-        stock: 100,
-      },
-      {
-        productName: 'Philips LED Bulb 10W',
-        productCode: 'PL-LED10-CD',
-        barcode: '8901097312067',
-        category: 'LED & Lighting',
-        brand: 'Philips',
-        price: 500,
-        salePrice: 500,
-        mrpPrice: 650,
-        wholesalePrice: 420,
-        stock: 50,
-      },
-      {
-        productName: 'Legrand Switches',
-        productCode: 'LG-SW-10A',
-        barcode: '8901234005099',
-        category: 'Switches & Sockets',
-        brand: 'Legrand',
-        price: 366.67,
-        salePrice: 366.67,
-        mrpPrice: 450,
-        wholesalePrice: 290,
-        stock: 80,
-      },
-      ...mockProducts.map((p) => ({
-        ...p,
-        salePrice: p.price,
-        mrpPrice: Math.round(p.price * 1.25),
-        wholesalePrice: Math.round(p.price * 0.85),
-        stock: 50,
-      })),
-    ];
+    // Create Owner & Sales Person
+    await pool.query(
+      'INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?), (?, ?, ?, ?)',
+      [
+        'Store Owner', 'owner@smartprice.com', hashedPassword, 'owner',
+        'Sales Person', 'sales@smartprice.com', hashedPassword, 'staff'
+      ]
+    );
+    console.log('Created Owner (owner@smartprice.com) & Sales Person (sales@smartprice.com)');
 
     // Clear Products
-    await Product.deleteMany({});
+    await pool.query('DELETE FROM products');
     console.log('Cleared existing products.');
 
-    // Seed Products
-    const createdProducts = await Product.insertMany(sampleItems);
-    console.log(`Successfully seeded ${createdProducts.length} mock products with 3 prices & stock.`);
+    for (const p of mockProducts) {
+      const salePrice = p.price;
+      const mrpPrice = Math.round(p.price * 1.25);
+      const wholesalePrice = Math.round(p.price * 0.85);
 
+      await pool.query(
+        `INSERT INTO products 
+         (productName, productCode, barcode, category, brand, price, salePrice, mrpPrice, wholesalePrice, stock)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [p.productName, p.productCode, p.barcode, p.category, p.brand, salePrice, salePrice, mrpPrice, wholesalePrice, 50]
+      );
+    }
+
+    console.log(`Successfully seeded ${mockProducts.length} mock products into MySQL.`);
     console.log('Seeding process completed!');
     process.exit(0);
   } catch (error) {
-    console.error('Error seeding database:', error);
+    console.error('Error seeding MySQL database:', error);
     process.exit(1);
   }
 };

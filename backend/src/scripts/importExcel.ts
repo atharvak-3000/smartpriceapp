@@ -1,11 +1,12 @@
-import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import * as XLSX from 'xlsx';
 import * as path from 'path';
 import * as fs from 'fs';
-import Product from '../models/Product';
+import getPool from '../config/db';
+import ProductModel from '../models/Product';
 
 dotenv.config();
+
 
 const showUsageAndExit = () => {
   console.log('\nUsage: npm run import-excel -- <path-to-excel-file>\n');
@@ -74,16 +75,18 @@ const run = async () => {
     process.exit(1);
   }
 
-  console.log(`Found ${rawRows.length} rows in sheet "${sheetName}". Connecting to MongoDB...`);
+  console.log(`Found ${rawRows.length} rows in sheet "${sheetName}". Connecting to MySQL database...`);
   
   try {
-    const mongoUri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/smartprice';
-    await mongoose.connect(mongoUri);
+    const pool = getPool();
+    const conn = await pool.getConnection();
+    conn.release();
     console.log('Database connected successfully.');
   } catch (dbErr) {
     console.error('Database connection failed:', dbErr);
     process.exit(1);
   }
+
 
   let successCount = 0;
   let updateCount = 0;
@@ -139,12 +142,12 @@ const run = async () => {
 
     // 3. Database uniqueness and existance check (upsert logic)
     try {
-      // Check if code already exists under another ID (though code is unique, it might be the same product, so we can update)
-      const existingProductByCode = await Product.findOne({ productCode: data.productCode });
+      // Check if code already exists under another ID
+      const existingProductByCode = await ProductModel.findByCode(data.productCode);
       
       if (data.barcode) {
-        // Enforce barcode uniqueness against DB (must not belong to another productCode)
-        const existingProductByBarcode = await Product.findOne({ barcode: data.barcode });
+        // Enforce barcode uniqueness against DB
+        const existingProductByBarcode = await ProductModel.findByBarcode(data.barcode);
         if (existingProductByBarcode && existingProductByBarcode.productCode !== data.productCode) {
           errors.push(`Row ${rowNum} (${data.productCode}): Barcode '${data.barcode}' already registered to product '${existingProductByBarcode.productName}' (${existingProductByBarcode.productCode}) in database.`);
           skipCount++;
@@ -154,26 +157,28 @@ const run = async () => {
 
       if (existingProductByCode) {
         // Update product (Upsert)
-        existingProductByCode.productName = data.productName;
-        existingProductByCode.category = data.category;
-        existingProductByCode.brand = data.brand;
-        existingProductByCode.price = data.price;
-        if (data.barcode !== undefined) {
-          existingProductByCode.barcode = data.barcode;
-        }
-        await existingProductByCode.save();
+        await ProductModel.update(existingProductByCode.id, {
+          productName: data.productName,
+          category: data.category,
+          brand: data.brand,
+          price: data.price,
+          salePrice: data.price,
+          barcode: data.barcode || null,
+        });
         updateCount++;
       } else {
         // Insert new product
-        const newProduct = new Product({
+        await ProductModel.create({
           productName: data.productName,
           productCode: data.productCode,
           barcode: data.barcode,
           category: data.category,
           brand: data.brand,
-          price: data.price
+          price: data.price,
+          salePrice: data.price,
+          mrpPrice: Math.round(data.price * 1.25),
+          stock: 0,
         });
-        await newProduct.save();
         successCount++;
       }
     } catch (saveErr: any) {
@@ -181,6 +186,7 @@ const run = async () => {
       skipCount++;
     }
   }
+
 
   // 4. Summarize results
   console.log('\n======================================');
@@ -198,8 +204,8 @@ const run = async () => {
     console.log('---------------------------------------\n');
   }
 
-  mongoose.connection.close();
   process.exit(0);
 };
+
 
 run();

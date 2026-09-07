@@ -1,9 +1,9 @@
-import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import User from '../models/User';
-import Product from '../models/Product';
+import bcrypt from 'bcryptjs';
+import getPool from '../config/db';
 
 dotenv.config();
+
 
 // Helper to generate a 13-digit EAN barcode starting with 890
 let barcodeCounter = 1000000001;
@@ -314,40 +314,47 @@ const generateProducts = () => {
 
 const seedDB = async () => {
   try {
-    const mongoUri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/smartprice';
-    await mongoose.connect(mongoUri);
-    console.log('Connected to MongoDB for large seeding...');
+    const pool = getPool();
+    console.log('Connecting to MySQL for large seeding...');
 
     // Clear Users
-    await User.deleteMany({});
+    await pool.query('DELETE FROM users');
     console.log('Cleared existing users.');
 
     // Create Owner
     const ownerPassword = 'Password123';
-    const owner = new User({
-      name: 'Store Owner',
-      email: 'owner@smartprice.com',
-      password: ownerPassword,
-      role: 'owner'
-    });
-    await owner.save();
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(ownerPassword, salt);
+    await pool.query(
+      'INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)',
+      ['Store Owner', 'owner@smartprice.com', hashedPassword, 'owner']
+    );
     console.log(`Created Owner account:`);
     console.log(`Email: owner@smartprice.com`);
     console.log(`Password: ${ownerPassword}`);
 
     // Clear Products
-    await Product.deleteMany({});
+    await pool.query('DELETE FROM products');
     console.log('Cleared existing products.');
 
     // Generate ~1000 Products
     console.log('Generating realistic product list...');
     const generatedProducts = generateProducts();
-    console.log(`Generated ${generatedProducts.length} unique items. Seeding into MongoDB...`);
+    console.log(`Generated ${generatedProducts.length} unique items. Seeding into MySQL...`);
 
-    // Seed Products
-    const createdProducts = await Product.insertMany(generatedProducts);
-    console.log(`Successfully seeded ${createdProducts.length} products!`);
+    for (const p of generatedProducts) {
+      const salePrice = p.salePrice || p.price;
+      const mrpPrice = p.mrpPrice || p.price;
+      const wholesalePrice = p.wholesalePrice || null;
+      await pool.query(
+        `INSERT INTO products 
+         (productName, productCode, barcode, category, brand, price, salePrice, mrpPrice, wholesalePrice, stock)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [p.productName, p.productCode, p.barcode, p.category, p.brand, salePrice, salePrice, mrpPrice, wholesalePrice, p.stock || 0]
+      );
+    }
 
+    console.log(`Successfully seeded ${generatedProducts.length} products into MySQL!`);
     console.log('Large seeding process completed!');
     process.exit(0);
   } catch (error) {
@@ -357,3 +364,4 @@ const seedDB = async () => {
 };
 
 seedDB();
+

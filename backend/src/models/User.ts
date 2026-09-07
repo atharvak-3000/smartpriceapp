@@ -1,55 +1,47 @@
-import { Schema, model } from 'mongoose';
+import getPool from '../config/db';
 import bcrypt from 'bcryptjs';
-import { IUser } from '../types'; // We'll define type interfaces separately or inline
+import { RowDataPacket, ResultSetHeader } from 'mysql2';
 
-const UserSchema = new Schema<IUser>(
-  {
-    name: {
-      type: String,
-      required: [true, 'Please add a name'],
-    },
-    email: {
-      type: String,
-      required: [true, 'Please add an email'],
-      unique: true,
-      match: [
-        /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/,
-        'Please add a valid email',
-      ],
-    },
-    password: {
-      type: String,
-      required: [true, 'Please add a password'],
-      minlength: 6,
-      select: false, // Don't return password by default
-    },
-    role: {
-      type: String,
-      enum: ['owner', 'admin', 'staff', 'salesperson'],
-      default: 'staff',
-    },
-  },
-  {
-    timestamps: true,
-  }
-);
+export interface UserRow extends RowDataPacket {
+  id: number;
+  name: string;
+  email: string;
+  password: string;
+  role: 'owner' | 'admin' | 'staff' | 'salesperson';
+  createdAt: Date;
+  updatedAt: Date;
+}
 
-// Encrypt password using bcrypt
-UserSchema.pre<IUser>('save', async function (next) {
-  if (!this.isModified('password')) {
-    return next();
+export class UserModel {
+  static async findByEmail(email: string): Promise<UserRow | null> {
+    const pool = getPool();
+    const [rows] = await pool.query<UserRow[]>('SELECT * FROM users WHERE email = ? LIMIT 1', [email]);
+    return rows.length > 0 ? rows[0] : null;
   }
-  if (this.password) {
+
+  static async findById(id: number | string): Promise<UserRow | null> {
+    const pool = getPool();
+    const [rows] = await pool.query<UserRow[]>(
+      'SELECT id, name, email, role, createdAt, updatedAt FROM users WHERE id = ? LIMIT 1',
+      [id]
+    );
+    return rows.length > 0 ? rows[0] : null;
+  }
+
+  static async matchPassword(enteredPassword: string, hashedPassword: string): Promise<boolean> {
+    return await bcrypt.compare(enteredPassword, hashedPassword);
+  }
+
+  static async create(name: string, email: string, rawPassword: string, role: string = 'staff'): Promise<number> {
+    const pool = getPool();
     const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(this.password, salt);
+    const hashedPassword = await bcrypt.hash(rawPassword, salt);
+    const [result] = await pool.query<ResultSetHeader>(
+      'INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)',
+      [name, email, hashedPassword, role]
+    );
+    return result.insertId;
   }
-  next();
-});
+}
 
-// Match user entered password to hashed password in database
-UserSchema.methods.matchPassword = async function (enteredPassword: string): Promise<boolean> {
-  return await bcrypt.compare(enteredPassword, this.password);
-};
-
-export const User = model<IUser>('User', UserSchema);
-export default User;
+export default UserModel;
