@@ -40,29 +40,29 @@ export const QuickPriceModal: React.FC<QuickPriceModalProps> = ({ visible, produ
 
   useEffect(() => {
     if (visible && product) {
-      const currentSale = (product.salePrice ?? product.price ?? 0).toString();
-      const currentMrp = (product.mrpPrice ?? product.salePrice ?? product.price ?? 0).toString();
-      const currentWholesale = product.wholesalePrice !== undefined ? product.wholesalePrice.toString() : '';
-
-      setSalePrice(currentSale);
-      setMrpPrice(currentMrp);
-      setWholesalePrice(currentWholesale);
+      const getValStr = (val: any) => {
+        if (val === undefined || val === null || val === 'Not Listed' || val === 'not listed' || val === 0) return '';
+        return String(val);
+      };
+      setSalePrice(getValStr(product.salePrice ?? product.price));
+      setMrpPrice(getValStr(product.mrpPrice));
+      setWholesalePrice(getValStr(product.wholesalePrice));
     }
   }, [visible, product]);
 
   if (!product) return null;
 
   const handleSave = async () => {
-    const saleNum = parseFloat(salePrice);
-    const mrpNum = mrpPrice ? parseFloat(mrpPrice) : saleNum;
-    const wholesaleNum = wholesalePrice ? parseFloat(wholesalePrice) : undefined;
+    const saleVal = salePrice.trim() === '' || salePrice.toLowerCase() === 'not listed' ? 'Not Listed' : parseFloat(salePrice);
+    const mrpVal = mrpPrice.trim() === '' || mrpPrice.toLowerCase() === 'not listed' ? 'Not Listed' : parseFloat(mrpPrice);
+    const wholesaleVal = wholesalePrice.trim() === '' || wholesalePrice.toLowerCase() === 'not listed' ? 'Not Listed' : parseFloat(wholesalePrice);
 
-    if (isNaN(saleNum) || saleNum < 0) {
-      Alert.alert('Invalid Price', 'Please enter a valid Sale Price.');
+    if (saleVal !== 'Not Listed' && (isNaN(saleVal as number) || (saleVal as number) < 0)) {
+      Alert.alert('Invalid Price', 'Please enter a valid Sale Price or leave blank for Not Listed.');
       return;
     }
 
-    if (mrpNum < saleNum) {
+    if (typeof mrpVal === 'number' && typeof saleVal === 'number' && mrpVal < saleVal) {
       Alert.alert('Price Warning', 'MRP should normally be greater than or equal to the Sale Price.');
     }
 
@@ -71,9 +71,9 @@ export const QuickPriceModal: React.FC<QuickPriceModalProps> = ({ visible, produ
       const res = await quickUpdatePrices(
         product._id,
         {
-          salePrice: saleNum,
-          mrpPrice: mrpNum,
-          wholesalePrice: wholesaleNum,
+          salePrice: saleVal as any,
+          mrpPrice: mrpVal as any,
+          wholesalePrice: wholesaleVal as any,
         },
         token
       );

@@ -8,16 +8,17 @@ const LAST_SYNC_KEY = 'smartprice_last_sync_time';
 
 export interface Product {
   _id: string;
+  id?: string;
   productName: string;
   productCode: string;
   barcode?: string;
   category: string;
   brand: string;
   description?: string;
-  price: number;            // Kept synchronized with salePrice for backward compatibility
-  salePrice?: number;       // Retail selling price (visible to Sales Person & Admin)
-  mrpPrice?: number;        // Maximum Retail Price (visible to Admin, optional for staff)
-  wholesalePrice?: number;  // Wholesale / Dealer price (visible ONLY to Admin/Superadmin)
+  price: number | string;            // Kept synchronized with salePrice for backward compatibility
+  salePrice?: number | string;       // Retail selling price (number or "Not Listed")
+  mrpPrice?: number | string;        // Maximum Retail Price (number or "Not Listed")
+  wholesalePrice?: number | string;  // Wholesale / Dealer price (number or "Not Listed")
   stock: number;
   imageUrl?: string;
   status: 'active' | 'inactive';
@@ -112,11 +113,27 @@ export const useProductStore = create<ProductState>((set, get) => ({
       const cached = await AsyncStorage.getItem(PRODUCTS_CACHE_KEY);
       const syncTime = await AsyncStorage.getItem(LAST_SYNC_KEY);
       if (cached) {
-        set({
-          products: JSON.parse(cached),
-          lastSynced: syncTime,
-        });
+        const parsed = JSON.parse(cached);
+        // Only use cache if it has products and is not the old sample dataset (e.g. HW-15-RD)
+        const hasOldData = parsed.length <= 15 && parsed.some((p: any) => p.productCode === 'HW-15-RD');
+        if (parsed.length > 0 && !hasOldData) {
+          set({
+            products: parsed,
+            lastSynced: syncTime,
+          });
+          return;
+        }
       }
+
+      // Preloaded fresh catalog (567 products)
+      const defaultProducts = require('../data/initialProducts.json');
+      const now = new Date().toLocaleString();
+      set({
+        products: defaultProducts,
+        lastSynced: now,
+      });
+      await AsyncStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(defaultProducts));
+      await AsyncStorage.setItem(LAST_SYNC_KEY, now);
     } catch (e) {
       console.error('Failed to load products from cache', e);
     } finally {
@@ -323,9 +340,17 @@ export const useProductStore = create<ProductState>((set, get) => ({
     if (sortBy === 'name_asc') {
       result.sort((a, b) => a.productName.localeCompare(b.productName));
     } else if (sortBy === 'price_asc') {
-      result.sort((a, b) => (a.salePrice ?? a.price) - (b.salePrice ?? b.price));
+      result.sort((a, b) => {
+        const pA = typeof a.salePrice === 'number' ? a.salePrice : (Number(a.salePrice ?? a.price) || 0);
+        const pB = typeof b.salePrice === 'number' ? b.salePrice : (Number(b.salePrice ?? b.price) || 0);
+        return pA - pB;
+      });
     } else if (sortBy === 'price_desc') {
-      result.sort((a, b) => (b.salePrice ?? b.price) - (a.salePrice ?? a.price));
+      result.sort((a, b) => {
+        const pA = typeof a.salePrice === 'number' ? a.salePrice : (Number(a.salePrice ?? a.price) || 0);
+        const pB = typeof b.salePrice === 'number' ? b.salePrice : (Number(b.salePrice ?? b.price) || 0);
+        return pB - pA;
+      });
     } else if (sortBy === 'stock_asc') {
       result.sort((a, b) => a.stock - b.stock);
     } else if (sortBy === 'stock_desc') {
@@ -382,7 +407,10 @@ export const useProductStore = create<ProductState>((set, get) => ({
 
   getTotalStockValue: () => {
     const { products } = get();
-    return products.reduce((sum, p) => sum + (p.salePrice ?? p.price) * p.stock, 0);
+    return products.reduce((sum, p) => {
+      const priceNum = typeof p.salePrice === 'number' ? p.salePrice : (Number(p.salePrice ?? p.price) || 0);
+      return sum + priceNum * (p.stock || 0);
+    }, 0);
   },
 
   getTotalStockCount: () => {

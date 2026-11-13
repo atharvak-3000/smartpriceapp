@@ -77,6 +77,12 @@ export const QuotationMakerModal: React.FC<QuotationMakerModalProps> = ({
   const [isProcessingSale, setIsProcessingSale] = useState(false);
 
   // Initialize with preselected product if passed
+  const getProductPriceNum = (prod: Product): number => {
+    if (typeof prod.salePrice === 'number') return prod.salePrice;
+    const num = Number(prod.salePrice ?? prod.price);
+    return isNaN(num) || num <= 0 ? 0 : num;
+  };
+
   React.useEffect(() => {
     if (visible) {
       if (preselectedProduct) {
@@ -84,7 +90,7 @@ export const QuotationMakerModal: React.FC<QuotationMakerModalProps> = ({
           {
             product: preselectedProduct,
             quantity: 1,
-            unitPrice: preselectedProduct.salePrice ?? preselectedProduct.price,
+            unitPrice: getProductPriceNum(preselectedProduct),
           },
         ]);
       }
@@ -123,7 +129,7 @@ export const QuotationMakerModal: React.FC<QuotationMakerModalProps> = ({
         {
           product: prod,
           quantity: 1,
-          unitPrice: prod.salePrice ?? prod.price,
+          unitPrice: getProductPriceNum(prod),
         },
       ]);
     }
@@ -578,7 +584,7 @@ export const QuotationMakerModal: React.FC<QuotationMakerModalProps> = ({
                   </View>
                   <View style={styles.pickerPriceCol}>
                     <Text style={[styles.pickerItemPrice, { color: colors.price }]}>
-                      {formatINR(p.salePrice ?? p.price)}
+                      {getProductPriceNum(p) > 0 ? formatINR(getProductPriceNum(p)) : 'Not Listed'}
                     </Text>
                     <View style={[styles.addChip, { backgroundColor: colors.accentLight }]}>
                       <Text style={[styles.addChipText, { color: colors.accent }]}>+ Add</Text>

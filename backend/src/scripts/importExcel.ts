@@ -7,26 +7,38 @@ import ProductModel from '../models/Product';
 
 dotenv.config();
 
-
 const showUsageAndExit = () => {
-  console.log('\nUsage: npm run import-excel -- <path-to-excel-file>\n');
-  console.log('Example: npm run import-excel -- sample_products.xlsx\n');
+  console.log('\nUsage: npm run import-excel -- <path-to-excel-file> [--clear]\n');
+  console.log('Example: npm run import-excel -- sample_products.xlsx --clear\n');
   process.exit(1);
 };
 
+// Clean price cell value into number or 'Not Listed'
+const parsePriceCell = (value: any): number | string => {
+  if (value === undefined || value === null || value === '' || String(value).trim() === '') {
+    return 'Not Listed';
+  }
+  const str = String(value).trim();
+  if (str.toLowerCase() === 'not listed') {
+    return 'Not Listed';
+  }
+  const num = Number(str.replace(/[^0-9.-]+/g, ''));
+  return isNaN(num) || num <= 0 ? 'Not Listed' : num;
+};
+
 // Map spreadsheet headers to product schema keys
-const normalizeRow = (row: any): any => {
+const normalizeRow = (row: any, fallbackIndex: number): any => {
   const normalized: any = {};
   
   for (const key of Object.keys(row)) {
     const value = row[key];
     if (value === undefined || value === null || value === '') continue;
 
-    const normalizedKey = key.toLowerCase().trim().replace(/[\s_-]/g, '');
+    const normalizedKey = key.toLowerCase().trim().replace(/[\s_*#-]/g, '');
     
     if (['productname', 'name', 'title', 'itemname'].includes(normalizedKey)) {
       normalized.productName = String(value).trim();
-    } else if (['productcode', 'code', 'sku', 'itemcode', 'id'].includes(normalizedKey)) {
+    } else if (['productcode', 'code', 'sku', 'itemcode'].includes(normalizedKey)) {
       normalized.productCode = String(value).toUpperCase().trim();
     } else if (['barcode', 'ean', 'upc', 'code128', 'bar'].includes(normalizedKey)) {
       normalized.barcode = String(value).trim();
@@ -34,15 +46,58 @@ const normalizeRow = (row: any): any => {
       normalized.category = String(value).trim();
     } else if (['brand', 'manufacturer', 'make', 'mfg'].includes(normalizedKey)) {
       normalized.brand = String(value).trim();
-    } else if (['price', 'rate', 'cost', 'mrp', 'sellingprice'].includes(normalizedKey)) {
-      normalized.price = Number(value);
+    } else if (['price', 'rate'].includes(normalizedKey)) {
+      normalized.price = parsePriceCell(value);
+    } else if (['saleprice', 'sellingprice', 'salesprice'].includes(normalizedKey)) {
+      normalized.salePrice = parsePriceCell(value);
+    } else if (['mrpprice', 'mrp'].includes(normalizedKey)) {
+      normalized.mrpPrice = parsePriceCell(value);
+    } else if (['wholesaleprice', 'dealerprice', 'wsprice'].includes(normalizedKey)) {
+      normalized.wholesalePrice = parsePriceCell(value);
+    } else if (['stock', 'qty', 'quantity'].includes(normalizedKey)) {
+      normalized.stock = parseInt(String(value), 10) || 0;
+    } else if (['status'].includes(normalizedKey)) {
+      normalized.status = String(value).toLowerCase().trim() === 'inactive' ? 'inactive' : 'active';
     }
   }
+
+  // Auto-generate SKU / Product Code if missing
+  if (!normalized.productCode) {
+    normalized.productCode = `SP-${String(fallbackIndex).padStart(4, '0')}`;
+  }
+
+  // Synchronize price and salePrice
+  if (normalized.salePrice !== undefined && normalized.price === undefined) {
+    normalized.price = normalized.salePrice;
+  } else if (normalized.price !== undefined && normalized.salePrice === undefined) {
+    normalized.salePrice = normalized.price;
+  } else if (normalized.price === undefined && normalized.salePrice === undefined) {
+    normalized.price = 'Not Listed';
+    normalized.salePrice = 'Not Listed';
+  }
+
+  if (normalized.mrpPrice === undefined) {
+    normalized.mrpPrice = 'Not Listed';
+  }
+
+  if (normalized.wholesalePrice === undefined) {
+    normalized.wholesalePrice = 'Not Listed';
+  }
+
+  if (normalized.stock === undefined) {
+    normalized.stock = 0;
+  }
+
+  if (normalized.status === undefined) {
+    normalized.status = 'active';
+  }
+
   return normalized;
 };
 
 const run = async () => {
   const args = process.argv.slice(2);
+  const shouldClear = args.includes('--clear');
   
   // Find index of the file path argument (ignore flags)
   const filePathArg = args.find(arg => !arg.startsWith('-'));
@@ -66,7 +121,8 @@ const run = async () => {
     process.exit(1);
   }
 
-  const sheetName = workbook.SheetNames[0];
+  // Choose 'Products' sheet if available, otherwise first sheet
+  const sheetName = workbook.SheetNames.includes('Products') ? 'Products' : workbook.SheetNames[0];
   const worksheet = workbook.Sheets[sheetName];
   const rawRows: any[] = XLSX.utils.sheet_to_json(worksheet);
 
@@ -77,8 +133,8 @@ const run = async () => {
 
   console.log(`Found ${rawRows.length} rows in sheet "${sheetName}". Connecting to MySQL database...`);
   
+  const pool = getPool();
   try {
-    const pool = getPool();
     const conn = await pool.getConnection();
     conn.release();
     console.log('Database connected successfully.');
@@ -87,87 +143,53 @@ const run = async () => {
     process.exit(1);
   }
 
+  if (shouldClear) {
+    console.log('Flag --clear specified: Clearing existing products table...');
+    await pool.query('DELETE FROM products');
+    console.log('Existing products cleared.');
+  }
 
   let successCount = 0;
   let updateCount = 0;
   let skipCount = 0;
   
   const errors: string[] = [];
-
-  // Tracks productCodes and barcodes seen in the current Excel file to avoid internal duplicates
   const codesInExcel = new Set<string>();
-  const barcodesInExcel = new Set<string>();
 
   for (let i = 0; i < rawRows.length; i++) {
-    const rowNum = i + 2; // Excel is 1-indexed, header is row 1
+    const rowNum = i + 2;
     const rawRow = rawRows[i];
-    const data = normalizeRow(rawRow);
+    const data = normalizeRow(rawRow, i + 1);
 
-    // 1. Validation
-    const missingFields: string[] = [];
-    if (!data.productName) missingFields.push('productName');
-    if (!data.productCode) missingFields.push('productCode');
-    if (!data.category) missingFields.push('category');
-    if (!data.brand) missingFields.push('brand');
-    if (data.price === undefined || isNaN(data.price)) missingFields.push('price');
-
-    if (missingFields.length > 0) {
-      errors.push(`Row ${rowNum}: Skipped due to missing/invalid fields: ${missingFields.join(', ')}`);
+    // Skip empty or instruction rows
+    if (!data.productName || !data.category || !data.brand) {
       skipCount++;
       continue;
     }
 
-    if (data.price < 0) {
-      errors.push(`Row ${rowNum} (${data.productCode}): Price cannot be negative. Got: ${data.price}`);
-      skipCount++;
-      continue;
-    }
-
-    // 2. Excel sheet uniqueness checks
     if (codesInExcel.has(data.productCode)) {
-      errors.push(`Row ${rowNum} (${data.productCode}): Duplicate productCode in Excel sheet.`);
-      skipCount++;
-      continue;
+      data.productCode = `${data.productCode}-${i + 1}`;
     }
     codesInExcel.add(data.productCode);
 
-    if (data.barcode) {
-      if (barcodesInExcel.has(data.barcode)) {
-        errors.push(`Row ${rowNum} (${data.productCode}): Duplicate barcode '${data.barcode}' in Excel sheet.`);
-        skipCount++;
-        continue;
-      }
-      barcodesInExcel.add(data.barcode);
-    }
-
-    // 3. Database uniqueness and existance check (upsert logic)
     try {
-      // Check if code already exists under another ID
-      const existingProductByCode = await ProductModel.findByCode(data.productCode);
-      
-      if (data.barcode) {
-        // Enforce barcode uniqueness against DB
-        const existingProductByBarcode = await ProductModel.findByBarcode(data.barcode);
-        if (existingProductByBarcode && existingProductByBarcode.productCode !== data.productCode) {
-          errors.push(`Row ${rowNum} (${data.productCode}): Barcode '${data.barcode}' already registered to product '${existingProductByBarcode.productName}' (${existingProductByBarcode.productCode}) in database.`);
-          skipCount++;
-          continue;
-        }
-      }
+      const existingProduct = await ProductModel.findByCode(data.productCode);
 
-      if (existingProductByCode) {
-        // Update product (Upsert)
-        await ProductModel.update(existingProductByCode.id, {
+      if (existingProduct) {
+        await ProductModel.update(existingProduct.id, {
           productName: data.productName,
           category: data.category,
           brand: data.brand,
           price: data.price,
-          salePrice: data.price,
+          salePrice: data.salePrice,
+          mrpPrice: data.mrpPrice,
+          wholesalePrice: data.wholesalePrice,
+          stock: data.stock,
           barcode: data.barcode || null,
+          status: data.status,
         });
         updateCount++;
       } else {
-        // Insert new product
         await ProductModel.create({
           productName: data.productName,
           productCode: data.productCode,
@@ -175,9 +197,11 @@ const run = async () => {
           category: data.category,
           brand: data.brand,
           price: data.price,
-          salePrice: data.price,
-          mrpPrice: Math.round(data.price * 1.25),
-          stock: 0,
+          salePrice: data.salePrice,
+          mrpPrice: data.mrpPrice,
+          wholesalePrice: data.wholesalePrice,
+          stock: data.stock,
+          status: data.status,
         });
         successCount++;
       }
@@ -187,8 +211,6 @@ const run = async () => {
     }
   }
 
-
-  // 4. Summarize results
   console.log('\n======================================');
   console.log('        EXCEL IMPORT SUMMARY          ');
   console.log('======================================');
@@ -206,6 +228,5 @@ const run = async () => {
 
   process.exit(0);
 };
-
 
 run();

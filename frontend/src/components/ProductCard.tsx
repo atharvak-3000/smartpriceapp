@@ -51,12 +51,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     }).start();
   };
 
-  const formatPrice = (price: number) => {
+  const formatPrice = (price: number | string | null | undefined) => {
+    if (price === null || price === undefined || price === '' || price === 'Not Listed' || price === 'not listed') {
+      return 'Not Listed';
+    }
+    const num = Number(price);
+    if (isNaN(num) || num <= 0) {
+      return 'Not Listed';
+    }
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
       currency: 'INR',
       maximumFractionDigits: 0,
-    }).format(price);
+    }).format(num);
   };
 
   const getStockBadgeConfig = (stock: number) => {
@@ -69,8 +76,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const stockConfig = getStockBadgeConfig(currentStock);
 
   // 3-Tier Prices
-  const salePrice = product.salePrice ?? product.price ?? 0;
-  const mrpPrice = product.mrpPrice ?? salePrice;
+  const salePrice = product.salePrice ?? product.price;
+  const isSaleNotListed = salePrice === 'Not Listed' || salePrice === null || salePrice === undefined || salePrice === '' || Number(salePrice) <= 0;
+  const mrpPrice = product.mrpPrice;
   const wholesalePrice = product.wholesalePrice;
 
   return (
@@ -130,7 +138,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           {/* Pricing Column */}
           <View style={styles.rightCol}>
             <View style={styles.priceWithEdit}>
-              <Text style={[styles.salePriceTag, { color: colors.price }]}>
+              <Text style={[styles.salePriceTag, { color: isSaleNotListed ? colors.textSecondary : colors.price }]}>
                 {formatPrice(salePrice)}
               </Text>
 
@@ -157,14 +165,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             <Text style={[styles.tierPriceText, { color: colors.textSecondary }]}>
               MRP: <Text style={{ color: colors.text, fontWeight: '700' }}>{formatPrice(mrpPrice)}</Text>
             </Text>
-            {wholesalePrice !== undefined && (
-              <Text style={[styles.tierPriceText, { color: colors.textSecondary }]}>
-                Wholesale:{' '}
-                <Text style={{ color: colors.wholesale, fontWeight: '700' }}>
-                  {formatPrice(wholesalePrice)}
-                </Text>
+            <Text style={[styles.tierPriceText, { color: colors.textSecondary }]}>
+              Wholesale:{' '}
+              <Text style={{ color: colors.wholesale, fontWeight: '700' }}>
+                {formatPrice(wholesalePrice)}
               </Text>
-            )}
+            </Text>
           </View>
         )}
 

@@ -104,10 +104,18 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
       }
     }
 
-    const effectiveSalePrice = salePrice !== undefined ? Number(salePrice) : Number(price || 0);
+    const sanitizePriceInput = (val: any): number | string => {
+      if (val === undefined || val === null || val === '' || String(val).toLowerCase() === 'not listed') {
+        return 'Not Listed';
+      }
+      const n = Number(val);
+      return isNaN(n) ? 'Not Listed' : n;
+    };
+
+    const effectiveSalePrice = sanitizePriceInput(salePrice !== undefined ? salePrice : price);
     const effectivePrice = effectiveSalePrice;
-    const effectiveMrp = mrpPrice !== undefined ? Number(mrpPrice) : effectiveSalePrice;
-    const effectiveWholesale = wholesalePrice !== undefined ? Number(wholesalePrice) : undefined;
+    const effectiveMrp = mrpPrice !== undefined ? sanitizePriceInput(mrpPrice) : effectiveSalePrice;
+    const effectiveWholesale = wholesalePrice !== undefined ? sanitizePriceInput(wholesalePrice) : undefined;
 
     const created = await ProductModel.create({
       productName: productName.trim(),
@@ -186,7 +194,13 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
       }
     }
 
-    const effectiveSalePrice = salePrice !== undefined ? Number(salePrice) : (price !== undefined ? Number(price) : undefined);
+    const sanitizePriceInput = (val: any): number | string => {
+      if (val === undefined || val === null || val === '' || String(val).toLowerCase() === 'not listed') {
+        return 'Not Listed';
+      }
+      const n = Number(val);
+      return isNaN(n) ? 'Not Listed' : n;
+    };
 
     const updateData: any = {};
     if (productName !== undefined) updateData.productName = productName.trim();
@@ -199,15 +213,16 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
     if (description !== undefined) updateData.description = description.trim() !== '' ? description.trim() : null;
     if (imageUrl !== undefined) updateData.imageUrl = imageUrl.trim() !== '' ? imageUrl.trim() : null;
 
-    if (effectiveSalePrice !== undefined) {
-      updateData.salePrice = effectiveSalePrice;
-      updateData.price = effectiveSalePrice;
+    if (salePrice !== undefined || price !== undefined) {
+      const sp = sanitizePriceInput(salePrice !== undefined ? salePrice : price);
+      updateData.salePrice = sp;
+      updateData.price = sp;
     }
     if (mrpPrice !== undefined) {
-      updateData.mrpPrice = Number(mrpPrice);
+      updateData.mrpPrice = sanitizePriceInput(mrpPrice);
     }
     if (wholesalePrice !== undefined) {
-      updateData.wholesalePrice = Number(wholesalePrice);
+      updateData.wholesalePrice = sanitizePriceInput(wholesalePrice);
     }
 
     const updated = await ProductModel.update(id, updateData);
@@ -243,17 +258,25 @@ export const quickUpdatePrice = async (req: Request, res: Response): Promise<voi
       return;
     }
 
+    const sanitizePriceInput = (val: any): number | string => {
+      if (val === undefined || val === null || val === '' || String(val).toLowerCase() === 'not listed') {
+        return 'Not Listed';
+      }
+      const n = Number(val);
+      return isNaN(n) ? 'Not Listed' : n;
+    };
+
     const updateData: any = {};
     if (salePrice !== undefined) {
-      const numSale = Number(salePrice);
-      updateData.salePrice = numSale;
-      updateData.price = numSale;
+      const sp = sanitizePriceInput(salePrice);
+      updateData.salePrice = sp;
+      updateData.price = sp;
     }
     if (mrpPrice !== undefined) {
-      updateData.mrpPrice = Number(mrpPrice);
+      updateData.mrpPrice = sanitizePriceInput(mrpPrice);
     }
     if (wholesalePrice !== undefined) {
-      updateData.wholesalePrice = Number(wholesalePrice);
+      updateData.wholesalePrice = sanitizePriceInput(wholesalePrice);
     }
 
     const updated = await ProductModel.update(id, updateData);

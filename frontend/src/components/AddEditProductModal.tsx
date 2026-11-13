@@ -88,6 +88,11 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
   // Populate form if editing
   useEffect(() => {
     if (visible) {
+      const getValStr = (val: any) => {
+        if (val === undefined || val === null || val === 'Not Listed' || val === 'not listed' || val === 0) return '';
+        return String(val);
+      };
+
       if (product) {
         reset({
           productName: product.productName,
@@ -95,9 +100,9 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
           category: product.category,
           brand: product.brand,
           description: product.description || '',
-          price: (product.salePrice ?? product.price ?? '').toString(),
-          mrpPrice: (product.mrpPrice ?? product.salePrice ?? product.price ?? '').toString(),
-          wholesalePrice: product.wholesalePrice !== undefined ? product.wholesalePrice.toString() : '',
+          price: getValStr(product.salePrice ?? product.price),
+          mrpPrice: getValStr(product.mrpPrice),
+          wholesalePrice: getValStr(product.wholesalePrice),
           stock: (product.stock ?? 0).toString(),
         });
         setImageUrl(product.imageUrl || null);
@@ -178,9 +183,15 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
     setIsSubmitting(true);
     try {
       const API_URL = getApiUrl();
-      const salePriceNum = Number(data.price);
-      const mrpNum = data.mrpPrice ? Number(data.mrpPrice) : salePriceNum;
-      const wholesaleNum = data.wholesalePrice ? Number(data.wholesalePrice) : undefined;
+      const parseField = (val: string) => {
+        if (!val || val.trim() === '' || val.toLowerCase() === 'not listed') return 'Not Listed';
+        const num = Number(val);
+        return isNaN(num) ? 'Not Listed' : num;
+      };
+
+      const salePriceNum = parseField(data.price);
+      const mrpNum = data.mrpPrice ? parseField(data.mrpPrice) : salePriceNum;
+      const wholesaleNum = data.wholesalePrice ? parseField(data.wholesalePrice) : undefined;
 
       const body = {
         ...data,
@@ -188,7 +199,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
         salePrice: salePriceNum,
         mrpPrice: mrpNum,
         wholesalePrice: wholesaleNum,
-        stock: Number(data.stock),
+        stock: Number(data.stock) || 0,
         imageUrl: imageUrl || undefined,
         status: isActive ? 'active' : 'inactive',
       };
@@ -380,12 +391,11 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
             <View style={styles.rowFields}>
               {/* Sale Price */}
               <View style={[styles.inputGroup, styles.halfField]}>
-                <Text style={styles.label}>Sale Price (₹) *</Text>
+                <Text style={styles.label}>Sale Price (₹)</Text>
                 <Controller
                   control={control}
                   rules={{
-                    required: 'Required',
-                    pattern: { value: /^\d+(\.\d{1,2})?$/, message: 'Invalid price' },
+                    pattern: { value: /^(\d+(\.\d{1,2})?|[Nn]ot\s*[Ll]isted)?$/, message: 'Invalid price' },
                   }}
                   name="price"
                   render={({ field: { onChange, onBlur, value } }) => (

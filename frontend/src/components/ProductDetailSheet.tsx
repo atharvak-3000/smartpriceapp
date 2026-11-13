@@ -49,12 +49,20 @@ interface ProductDetailSheetProps {
   isOwner?: boolean;
 }
 
-const formatPrice = (price: number) =>
-  new Intl.NumberFormat('en-IN', {
+const formatPrice = (price: number | string | null | undefined) => {
+  if (price === null || price === undefined || price === '' || price === 'Not Listed' || price === 'not listed') {
+    return 'Not Listed';
+  }
+  const num = Number(price);
+  if (isNaN(num) || num <= 0) {
+    return 'Not Listed';
+  }
+  return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
     maximumFractionDigits: 0,
-  }).format(price);
+  }).format(num);
+};
 
 export const ProductDetailSheet: React.FC<ProductDetailSheetProps> = ({
   visible,
@@ -89,8 +97,9 @@ export const ProductDetailSheet: React.FC<ProductDetailSheetProps> = ({
   if (!product) return null;
 
   const currentStock = product.stock ?? 0;
-  const salePrice = product.salePrice ?? product.price ?? 0;
-  const mrpPrice = product.mrpPrice ?? salePrice;
+  const salePrice = product.salePrice ?? product.price;
+  const isSaleNotListed = salePrice === 'Not Listed' || salePrice === null || salePrice === undefined || salePrice === '' || Number(salePrice) <= 0;
+  const mrpPrice = product.mrpPrice;
   const wholesalePrice = product.wholesalePrice;
 
   const getStockConfig = (stock: number) => {
@@ -156,7 +165,7 @@ export const ProductDetailSheet: React.FC<ProductDetailSheetProps> = ({
             <View style={[styles.priceBlock, { backgroundColor: colors.inputBackground }]}>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.priceLabel, { color: colors.textSecondary }]}>Sale Price</Text>
-                <Text style={[styles.priceValue, { color: colors.price }]}>
+                <Text style={[styles.priceValue, { color: isSaleNotListed ? colors.textSecondary : colors.price }]}>
                   {formatPrice(salePrice)}
                 </Text>
               </View>
@@ -186,7 +195,7 @@ export const ProductDetailSheet: React.FC<ProductDetailSheetProps> = ({
                 <View style={styles.tierCol}>
                   <Text style={[styles.tierLabel, { color: colors.textSecondary }]}>Wholesale Price</Text>
                   <Text style={[styles.tierVal, { color: colors.wholesale }]}>
-                    {wholesalePrice !== undefined ? formatPrice(wholesalePrice) : 'N/A'}
+                    {formatPrice(wholesalePrice)}
                   </Text>
                 </View>
               </View>

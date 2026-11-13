@@ -29,10 +29,10 @@ export interface FormattedProduct {
   category: string;
   brand: string;
   description?: string;
-  price: number;
-  salePrice: number;
-  mrpPrice: number;
-  wholesalePrice?: number;
+  price: number | string;
+  salePrice: number | string;
+  mrpPrice: number | string;
+  wholesalePrice?: number | string;
   stock: number;
   imageUrl?: string;
   status: 'active' | 'inactive';
@@ -40,10 +40,18 @@ export interface FormattedProduct {
   updatedAt: string;
 }
 
+const parseDisplayPrice = (val: any): number | string => {
+  if (val === null || val === undefined || val === '' || String(val).toLowerCase() === 'not listed') {
+    return 'Not Listed';
+  }
+  const n = Number(val);
+  return isNaN(n) ? 'Not Listed' : n;
+};
+
 export const formatProduct = (row: ProductRow, isSalesPerson: boolean = false): FormattedProduct => {
-  const salePrice = Number(row.salePrice !== null && row.salePrice !== undefined ? row.salePrice : row.price);
-  const mrpPrice = Number(row.mrpPrice !== null && row.mrpPrice !== undefined ? row.mrpPrice : salePrice);
-  const wholesalePrice = row.wholesalePrice !== null && row.wholesalePrice !== undefined ? Number(row.wholesalePrice) : undefined;
+  const salePrice = parseDisplayPrice(row.salePrice !== null && row.salePrice !== undefined && row.salePrice !== '' ? row.salePrice : row.price);
+  const mrpPrice = parseDisplayPrice(row.mrpPrice);
+  const wholesalePrice = isSalesPerson ? undefined : parseDisplayPrice(row.wholesalePrice);
 
   const formatted: FormattedProduct = {
     _id: String(row.id),
@@ -132,10 +140,10 @@ export class ProductModel {
     category: string;
     brand: string;
     description?: string;
-    price: number;
-    salePrice: number;
-    mrpPrice: number;
-    wholesalePrice?: number;
+    price: number | string;
+    salePrice: number | string;
+    mrpPrice: number | string;
+    wholesalePrice?: number | string;
     stock: number;
     imageUrl?: string;
     status?: 'active' | 'inactive';
@@ -152,10 +160,10 @@ export class ProductModel {
         data.category,
         data.brand,
         data.description || null,
-        data.salePrice,
-        data.salePrice,
-        data.mrpPrice,
-        data.wholesalePrice !== undefined ? data.wholesalePrice : null,
+        String(data.salePrice),
+        String(data.salePrice),
+        String(data.mrpPrice !== undefined ? data.mrpPrice : 'Not Listed'),
+        data.wholesalePrice !== undefined ? String(data.wholesalePrice) : 'Not Listed',
         data.stock || 0,
         data.imageUrl || null,
         data.status || 'active',
@@ -176,10 +184,10 @@ export class ProductModel {
       category: string;
       brand: string;
       description: string | null;
-      price: number;
-      salePrice: number;
-      mrpPrice: number;
-      wholesalePrice: number | null;
+      price: number | string;
+      salePrice: number | string;
+      mrpPrice: number | string;
+      wholesalePrice: number | string | null;
       stock: number;
       imageUrl: string | null;
       status: 'active' | 'inactive';
