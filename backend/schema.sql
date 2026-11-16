@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS `users` (
 -- --------------------------------------------------------
 -- 2. Table structure for table `products`
 -- --------------------------------------------------------
-CREATE TABLE IF NOT EXISTS `products` (
+DROP TABLE IF EXISTS `products`;
+CREATE TABLE `products` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `productName` VARCHAR(255) NOT NULL,
   `productCode` VARCHAR(100) NOT NULL UNIQUE,
